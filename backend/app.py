@@ -9,6 +9,7 @@ import re
 import urllib.request
 import urllib.error
 from pathlib import Path
+from typing import Optional
 
 from flask import Flask, jsonify, request, send_from_directory, send_file
 from docx import Document
@@ -114,12 +115,12 @@ def _set_job(job_id: str, **kwargs):
         _jobs[job_id] = job
 
 
-def _get_job(job_id: str) -> dict | None:
+def _get_job(job_id: str) -> Optional[dict]:
     with _jobs_lock:
         return _jobs.get(job_id)
 
 
-def _run(cmd: list[str], cwd: Path | None = None) -> tuple[int, str]:
+def _run(cmd: list[str], cwd: Optional[Path] = None) -> tuple[int, str]:
     try:
         p = subprocess.Popen(
             cmd,
@@ -142,7 +143,7 @@ def _run(cmd: list[str], cwd: Path | None = None) -> tuple[int, str]:
 
 def _run_stream(
     cmd: list[str],
-    cwd: Path | None = None,
+    cwd: Optional[Path] = None,
     on_line=None,
     max_capture_lines: int = 5000,
 ) -> tuple[int, str]:
@@ -217,7 +218,7 @@ def _whisper_transcribe(wav_path: Path, out_prefix: Path) -> tuple[bool, str]:
     progress_re = re.compile(r"progress\\s*=\\s*(\\d+)%", re.IGNORECASE)
     any_percent_re = re.compile(r"(\\d{1,3})%")
     log_tail: list[str] = []
-    last_progress: int | None = None
+    last_progress: Optional[int] = None
 
     def on_line(line: str):
         nonlocal last_progress, log_tail
