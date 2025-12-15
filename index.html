@@ -197,6 +197,18 @@
             <button class="btn-secondary" id="clearBtn">清空</button>
         </div>
 
+        <div class="button-group">
+            <button class="btn-secondary" id="downloadTxtBtn" disabled>下载转写文本</button>
+            <button class="btn-secondary" id="bundleBtn" disabled>导出给LLM（docx+文本）</button>
+        </div>
+
+        <div style="margin-top: 10px;">
+            <input type="file" id="docxInput" accept=".docx" style="display: block; width: 100%;" />
+            <div class="upload-text" style="font-size: 12px; margin-top: 6px; color: #666;">
+                选择访谈提纲（.docx），然后点“导出给LLM”，会下载一个 bundle-xxxx.json（包含 questions + transcript）。
+            </div>
+        </div>
+
         <div class="result-area" id="resultArea">
             <div class="result-label">转换结果：</div>
             <div class="result-text" id="resultText"></div>
@@ -210,6 +222,9 @@
         const audioElement = document.getElementById('audioElement');
         const transcribeBtn = document.getElementById('transcribeBtn');
         const clearBtn = document.getElementById('clearBtn');
+        const downloadTxtBtn = document.getElementById('downloadTxtBtn');
+        const bundleBtn = document.getElementById('bundleBtn');
+        const docxInput = document.getElementById('docxInput');
         const resultArea = document.getElementById('resultArea');
         const resultText = document.getElementById('resultText');
         const status = document.getElementById('status');
@@ -247,6 +262,8 @@
             } catch (e) {
                 backendReady = false;
                 transcribeBtn.disabled = true;
+                downloadTxtBtn.disabled = true;
+                bundleBtn.disabled = true;
                 showStatus('未检测到本地服务：请先运行 python backend/app.py，再用 http://127.0.0.1:8000 打开本页面', 'error');
             }
         }
@@ -294,6 +311,8 @@
             audioElement.src = url;
             audioPlayer.style.display = 'block';
             transcribeBtn.disabled = !backendReady ? true : false;
+            downloadTxtBtn.disabled = true;
+            bundleBtn.disabled = true;
             resultText.textContent = '';
             resultArea.style.display = 'none';
             showStatus('文件已加载，点击“开始转文字”上传并离线转写（1小时音频可能需要较长时间）', 'info');
@@ -333,6 +352,8 @@
                 }
                 currentJobId = data.job_id;
                 transcribeBtn.textContent = '转写中...';
+                downloadTxtBtn.disabled = true;
+                bundleBtn.disabled = true;
                 showStatus('已提交转写任务，处理中…（可切到后台等待）', 'info');
 
                 pollTimer = setInterval(async () => {
@@ -365,6 +386,8 @@
                             stopPolling();
                             transcribeBtn.disabled = false;
                             transcribeBtn.textContent = '开始转文字';
+                            downloadTxtBtn.disabled = false;
+                            bundleBtn.disabled = false;
                             return;
                         }
                         if (jd.status === 'error') {
@@ -372,6 +395,8 @@
                             stopPolling();
                             transcribeBtn.disabled = false;
                             transcribeBtn.textContent = '开始转文字';
+                            downloadTxtBtn.disabled = true;
+                            bundleBtn.disabled = true;
                             return;
                         }
                         // queued / running：上面已处理 message/progress
@@ -386,6 +411,56 @@
                 showStatus('提交失败：' + (e && e.message ? e.message : 'unknown'), 'error');
                 transcribeBtn.disabled = false;
                 transcribeBtn.textContent = '开始转文字';
+                downloadTxtBtn.disabled = true;
+                bundleBtn.disabled = true;
+            }
+        });
+
+        downloadTxtBtn.addEventListener('click', () => {
+            if (!currentJobId) {
+                showStatus('没有可下载的任务，请先转写完成', 'error');
+                return;
+            }
+            window.location.href = `/api/jobs/${currentJobId}/download`;
+        });
+
+        bundleBtn.addEventListener('click', async () => {
+            if (!currentJobId) {
+                showStatus('请先完成一次转写', 'error');
+                return;
+            }
+            const docxFile = docxInput.files && docxInput.files[0] ? docxInput.files[0] : null;
+            if (!docxFile) {
+                showStatus('请先选择一个 .docx 提纲文件', 'error');
+                return;
+            }
+
+            try {
+                bundleBtn.disabled = true;
+                showStatus('正在生成 bundle.json（questions + transcript）...', 'info');
+                const form = new FormData();
+                form.append('job_id', currentJobId);
+                form.append('docx', docxFile, docxFile.name);
+
+                const resp = await fetch('/api/bundle', { method: 'POST', body: form });
+                if (!resp.ok) {
+                    const data = await resp.json().catch(() => ({}));
+                    throw new Error(data && data.error ? data.error : '生成 bundle 失败');
+                }
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `bundle-${currentJobId}.json`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+                showStatus('已生成 bundle.json（已下载）', 'success');
+            } catch (e) {
+                showStatus('生成失败：' + (e && e.message ? e.message : 'unknown'), 'error');
+            } finally {
+                bundleBtn.disabled = false;
             }
         });
 
@@ -397,6 +472,8 @@
             resultText.textContent = '';
             resultArea.style.display = 'none';
             transcribeBtn.disabled = true;
+            downloadTxtBtn.disabled = true;
+            bundleBtn.disabled = true;
             fileInput.value = '';
             stopPolling();
             lastLog = '';

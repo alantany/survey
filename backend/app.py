@@ -8,7 +8,8 @@ import shutil
 import re
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, send_file
+from docx import Document
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -300,6 +301,111 @@ def job(job_id: str):
     }
     return jsonify(resp)
 
+
+@app.get("/api/jobs/<job_id>/download")
+def download_job_text(job_id: str):
+    """
+    下载转写文本（.txt）。优先使用内存里的 text；否则读取 data/work/<job_id>.txt
+    """
+    j = _get_job(job_id)
+    if j and j.get("text"):
+        tmp = WORK_DIR / f"{job_id}.txt"
+        tmp.write_text(j.get("text", ""), encoding="utf-8")
+        return send_file(
+            str(tmp),
+            mimetype="text/plain; charset=utf-8",
+            as_attachment=True,
+            download_name=f"{job_id}.txt",
+        )
+
+    txt_path = WORK_DIR / f"{job_id}.txt"
+    if not txt_path.exists():
+        alt = WORK_DIR / f"{job_id}.txt"
+        if not alt.exists():
+            return jsonify({"error": "转写文本不存在或任务未完成"}), 404
+        txt_path = alt
+
+    return send_file(
+        str(txt_path),
+        mimetype="text/plain; charset=utf-8",
+        as_attachment=True,
+        download_name=f"{job_id}.txt",
+    )
+
+
+def _extract_questions_from_docx(docx_path: Path) -> list[dict]:
+    """
+    从 docx 里提取“编号清晰”的问题。
+    输出: [{id: '1', text: '...'}, ...]
+    """
+    doc = Document(str(docx_path))
+    questions: list[dict] = []
+
+    # 常见编号：1. / 1、/ 1) / （1）/ 1）/ Q1 / Q1:
+    q_re = re.compile(r"^(?:Q\\s*)?(\\d{1,3})\\s*(?:[\\.、:：\\)）]|（\\1）)\\s*(.+)$", re.IGNORECASE)
+
+    for p in doc.paragraphs:
+        t = (p.text or "").strip()
+        if not t:
+            continue
+        m = q_re.match(t)
+        if not m:
+            continue
+        qid = m.group(1).strip()
+        qtext = m.group(2).strip()
+        if qtext:
+            questions.append({"id": qid, "text": qtext})
+
+    return questions
+
+
+@app.post("/api/bundle")
+def make_bundle():
+    """
+    将“问题清单(docx)” + “转写文本(job_id)” 打包成 JSON，方便用户调用自己的 LLM API。
+    不在服务端调用任何大模型。
+    """
+    job_id = (request.form.get("job_id") or "").strip()
+    if not job_id:
+        return jsonify({"error": "缺少 job_id"}), 400
+
+    txt_path = WORK_DIR / f"{job_id}.txt"
+    if not txt_path.exists():
+        return jsonify({"error": f"找不到转写文本：{txt_path}（请确认任务已完成）"}), 404
+
+    if "docx" not in request.files:
+        return jsonify({"error": "缺少 docx 文件字段 docx"}), 400
+
+    f = request.files["docx"]
+    if not f.filename or not f.filename.lower().endswith(".docx"):
+        return jsonify({"error": "请上传 .docx 文件"}), 400
+
+    bundle_id = uuid.uuid4().hex
+    docx_path = WORK_DIR / f"{bundle_id}.docx"
+    f.save(str(docx_path))
+
+    try:
+        questions = _extract_questions_from_docx(docx_path)
+    except Exception as e:
+        return jsonify({"error": f"解析 docx 失败：{e}"}), 400
+
+    transcript = txt_path.read_text(encoding="utf-8", errors="ignore")
+    payload = {
+        "job_id": job_id,
+        "docx_name": f.filename,
+        "questions": questions,
+        "transcript": transcript,
+    }
+
+    out_path = WORK_DIR / f"bundle-{job_id}.json"
+    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return send_file(
+        str(out_path),
+        mimetype="application/json; charset=utf-8",
+        as_attachment=True,
+        download_name=f"bundle-{job_id}.json",
+    )
 
 @app.get("/api/health")
 def health():
