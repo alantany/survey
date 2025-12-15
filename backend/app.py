@@ -74,7 +74,16 @@ def _load_local_config() -> dict:
 
     api_key = (cfg.get("openrouter_api_key") if isinstance(cfg, dict) else None) or os.environ.get("OPENROUTER_API_KEY")
     model = (cfg.get("openrouter_model") if isinstance(cfg, dict) else None) or os.environ.get("OPENROUTER_MODEL") or "tngtech/deepseek-r1t2-chimera:free"
-    return {"openrouter_api_key": (api_key or "").strip(), "openrouter_model": (model or "").strip()}
+    max_tokens = (cfg.get("openrouter_max_tokens") if isinstance(cfg, dict) else None) or os.environ.get("OPENROUTER_MAX_TOKENS") or 8192
+    try:
+        max_tokens = int(max_tokens)
+    except Exception:
+        max_tokens = 8192
+    return {
+        "openrouter_api_key": (api_key or "").strip(),
+        "openrouter_model": (model or "").strip(),
+        "openrouter_max_tokens": max_tokens,
+    }
 
 
 def _strip_code_fence(s: str) -> str:
@@ -452,7 +461,7 @@ def _build_qa_prompt(transcript: str, questions_text: str) -> str:
 现在开始输出最终结果（只输出结果正文）："""
 
 
-def _openrouter_chat(api_key: str, model: str, prompt: str) -> dict:
+def _openrouter_chat(api_key: str, model: str, prompt: str, max_tokens: int) -> dict:
     """
     OpenRouter（OpenAI 兼容）接口：
     POST https://openrouter.ai/api/v1/chat/completions
@@ -465,7 +474,7 @@ def _openrouter_chat(api_key: str, model: str, prompt: str) -> dict:
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.2,
-        "max_tokens": 8192,
+        "max_tokens": max_tokens,
     }
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -557,6 +566,7 @@ def llm_match():
     cfg = _load_local_config()
     api_key = cfg.get("openrouter_api_key", "")
     model = cfg.get("openrouter_model", "tngtech/deepseek-r1t2-chimera:free")
+    max_tokens = int(cfg.get("openrouter_max_tokens", 8192))
 
     if not api_key:
         return jsonify({"error": "未配置 OpenRouter API Key：请在项目根目录创建 config.json（参考 config.example.json）"}), 400
@@ -567,18 +577,34 @@ def llm_match():
 
     prompt = _build_qa_prompt(transcript=transcript, questions_text=questions)
     try:
-        resp = _openrouter_chat(api_key=api_key, model=model, prompt=prompt)
+        resp = _openrouter_chat(api_key=api_key, model=model, prompt=prompt, max_tokens=max_tokens)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
     content = ""
+    finish_reason = ""
+    usage = {}
     try:
         content = resp["choices"][0]["message"]["content"]
+        finish_reason = resp["choices"][0].get("finish_reason", "")
     except Exception:
         content = ""
 
     cleaned = _strip_code_fence(content)
-    return jsonify({"model": model, "cleaned": cleaned})
+    try:
+        usage = resp.get("usage") or {}
+    except Exception:
+        usage = {}
+
+    return jsonify(
+        {
+            "model": model,
+            "max_tokens": max_tokens,
+            "finish_reason": finish_reason,
+            "usage": usage,
+            "cleaned": cleaned,
+        }
+    )
 
 @app.get("/api/health")
 def health():

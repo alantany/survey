@@ -573,7 +573,8 @@
                 matchText.textContent = lastMatchContent || '';
                 matchArea.style.display = 'block';
                 downloadMatchBtn.disabled = false;
-                showStatus('匹配完成', 'success');
+                const fr = data.finish_reason ? `，finish_reason=${data.finish_reason}` : '';
+                showStatus(`匹配完成${fr}`, 'success');
             } catch (e) {
                 showStatus('匹配失败：' + (e && e.message ? e.message : 'unknown'), 'error');
             } finally {

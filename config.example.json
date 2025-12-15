@@ -1,6 +1,7 @@
 {
   "openrouter_api_key": "PUT_YOUR_OPENROUTER_KEY_HERE",
-  "openrouter_model": "tngtech/deepseek-r1t2-chimera:free"
+  "openrouter_model": "tngtech/deepseek-r1t2-chimera:free",
+  "openrouter_max_tokens": 8192
 }
 
 
