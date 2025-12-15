@@ -425,7 +425,7 @@ def _extract_full_text_from_docx(docx_path: Path) -> str:
 
 
 def _build_qa_prompt(transcript: str, questions_text: str) -> str:
-    # 目标：让模型直接输出“问题->答案”的严格 JSON，便于后续落库/检索
+    # 目标：输出“人类可读、可二次加工”的纯文本（用户已验证效果好）
     return f"""你是一个严谨的定性研究助理。现在有两份文本：
 
 【问题模板 questions】：
@@ -437,45 +437,30 @@ def _build_qa_prompt(transcript: str, questions_text: str) -> str:
 任务：
 1) 识别并区分“采访者/受访者”的说话段落（转写里没有显式标记，请你根据语气、问句/追问、承接关系推断；不确定就标记为 unknown）。
 2) 按照 questions 的题号，把 transcript 中“受访者的回答内容”匹配到对应问题下。
-3) 每个问题输出：
-   - answer: 归纳后的答案（尽量忠实，中文）
-   - evidence: 2~5 条原文证据（尽量逐字引用，附带你推断的 speaker=interviewer/interviewee/unknown）
-   - confidence: 0~1
-4) 如果 transcript 里找不到某题答案，answer 为空字符串，confidence=0，并在 notes 说明缺失原因。
+3) 你需要输出**纯文本**，格式必须严格按下面模板（不要 JSON，不要 Markdown code block）：
 
-输出要求（非常重要）：
-- 只能输出**一个 JSON 对象**，不要输出任何多余文字，不要 Markdown。
-- JSON 结构如下（字段名必须一致）：
-{{
-  "meta": {{
-    "language": "zh-CN",
-    "speaker_note": "说明你如何区分采访者/受访者"
-  }},
-  "results": [
-    {{
-      "category": "学龄前/学龄期/成年及以上/非结构化（来自 questions 的标题）",
-      "questions": [
-        {{
-          "id": "1",
-          "question": "问题原文",
-          "answer": "归纳答案",
-          "evidence": [
-            {{"speaker":"interviewee","quote":"..."}},
-            {{"speaker":"unknown","quote":"..."}}
-          ],
-          "confidence": 0.0,
-          "notes": ""
-        }}
-      ]
-    }}
-  ],
-  "unmatched": [
-    {{
-      "speaker": "unknown",
-      "quote": "未能归类到任何问题的重要片段（可选）"
-    }}
-  ]
-}}
+输出模板（示例）：
+三、学龄前康复阶段（17 题）
+
+最初发现孩子可能存在发育异常的人是谁？
+
+录音内容：......
+
+从孩子最初被怀疑异常，到最终被确诊孤独症，整个过程用了多长时间？
+
+录音中未提及（或：录音内容：......）
+
+……
+
+规则：
+- 以 questions 中的四大类标题作为分组标题（原样输出标题）
+- 每个问题按“问题原文 + 空行 + 录音内容：xxx/录音中未提及”输出
+- “录音内容”要尽量忠实原话，可做轻微归纳，但不要虚构
+- 若只能推断到部分信息，也要写在“录音内容：”里，并说明不确定点（例如“可能/推测”）
+- 如果某题确实没有信息，统一写：录音中未提及。
+- 不要输出任何与任务无关的解释、分析、置信度、JSON、代码块。
+
+现在开始输出最终结果（只输出结果正文）： 
 """
 
 
@@ -606,18 +591,12 @@ def llm_match():
         content = ""
 
     cleaned = _strip_code_fence(content)
-    parsed = None
-    try:
-        parsed = json.loads(cleaned) if cleaned else None
-    except Exception:
-        parsed = None
 
     return jsonify(
         {
             "model": model,
             "content": content,
             "cleaned": cleaned,
-            "parsed": parsed,
         }
     )
 

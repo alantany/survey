@@ -228,7 +228,7 @@
         </div>
 
         <div class="result-area" id="matchArea" style="display:none;">
-            <div class="result-label">匹配结果（模型原始输出）：</div>
+            <div class="result-label">匹配结果：</div>
             <div class="result-text" id="matchText"></div>
         </div>
     </div>
@@ -538,9 +538,8 @@
                     throw new Error(data && data.error ? data.error : '调用失败');
                 }
 
-                // 优先展示可解析 JSON（cleaned/parsed），否则展示原始 content
                 lastMatchContent = data.cleaned || data.content || '';
-                matchText.textContent = data.parsed ? JSON.stringify(data.parsed, null, 2) : (lastMatchContent || '');
+                matchText.textContent = lastMatchContent || '';
                 matchArea.style.display = 'block';
                 downloadMatchBtn.disabled = false;
                 showStatus('匹配完成', 'success');
@@ -556,11 +555,11 @@
                 showStatus('没有可下载的结果', 'error');
                 return;
             }
-            const blob = new Blob([lastMatchContent], { type: 'application/json;charset=utf-8' });
+            const blob = new Blob([lastMatchContent], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'qa_match_result.json';
+            a.download = 'qa_match_result.txt';
             document.body.appendChild(a);
             a.click();
             a.remove();
