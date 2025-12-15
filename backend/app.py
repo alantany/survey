@@ -430,6 +430,7 @@ def _build_qa_prompt(transcript: str, questions_text: str) -> str:
 
 请严格按 questions.txt 的分类标题与题目顺序输出。输出只允许包含“分类标题 + 问题 + 答案”，不要输出其它任何干扰内容（不要解释、不要规则、不要 JSON、不要 Markdown、不要代码块）。
 并且**每个问题必须带题号**，格式为：`题号. 问题原文`（例如：`1. 最初发现...？`）。
+重要：你必须覆盖 questions.txt 中的**四大类全部问题**，不得只输出第一类/前半部分。
 
 输出格式模板（必须严格遵守）：
 三、学龄前康复阶段（17 题）
@@ -451,64 +452,6 @@ def _build_qa_prompt(transcript: str, questions_text: str) -> str:
 现在开始输出最终结果（只输出结果正文）："""
 
 
-def _build_category_prompt(transcript: str, category_title: str, questions_block: str) -> str:
-    """
-    针对单个类别生成提示词，避免一次输出过长被截断。
-    """
-    return f"""我上传了两份文件，一份是录音.txt，是对采访者的录音内容。 questions.txt 这是准备好的问题，我需要你分析录音的内容，并把里面的内容分别匹配到对应的 questions 的问题里面，但是录音中，无法区分出采访者和被采访者，你只能自己去识别判断。
-
-请严格按 questions.txt 的分类标题与题目顺序输出。输出只允许包含“分类标题 + 问题 + 答案”，不要输出其它任何干扰内容（不要解释、不要规则、不要 JSON、不要 Markdown、不要代码块）。
-并且每个问题必须带题号，格式为：`题号. 问题原文`，下一行以 `录音内容：...` 或 `录音中未提及...` 开头。
-
-本次只输出下面这一类（不要输出其它类别）：
-{category_title}
-
-【该类别 questions】：
-{questions_block}
-
-【录音.txt】：
-{transcript}
-
-现在开始输出最终结果（只输出结果正文）："""
-
-
-def _parse_questions_text(questions_text: str) -> list[dict]:
-    """
-    从 questions.txt（人类可读）中解析出分类与题目。
-    支持两种标题格式：
-    - '三、学龄前康复阶段（17 题）'
-    - '### 三、学龄前康复阶段（17 题）'
-    题目行格式：
-    - '1. ...'
-    - '1、...'
-    """
-    lines = [(ln or "").strip() for ln in (questions_text or "").splitlines()]
-    cats: list[dict] = []
-    cur = None
-
-    heading_re = re.compile(r"^(?:###\s*)?([一二三四五六七八九十]+、.+)$")
-    q_re = re.compile(r"^(\d{1,3})\s*[\.、]\s*(.+)$")
-
-    for ln in lines:
-        if not ln:
-            continue
-        m_h = heading_re.match(ln)
-        if m_h:
-            title = m_h.group(1).strip()
-            cur = {"title": title, "questions": []}
-            cats.append(cur)
-            continue
-        m_q = q_re.match(ln)
-        if m_q and cur is not None:
-            qid = m_q.group(1).strip()
-            qtext = m_q.group(2).strip()
-            if qtext:
-                cur["questions"].append({"id": qid, "text": qtext})
-            continue
-
-    return cats
-
-
 def _openrouter_chat(api_key: str, model: str, prompt: str) -> dict:
     """
     OpenRouter（OpenAI 兼容）接口：
@@ -522,7 +465,7 @@ def _openrouter_chat(api_key: str, model: str, prompt: str) -> dict:
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.2,
-        "max_tokens": 4096,
+        "max_tokens": 8192,
     }
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
@@ -622,34 +565,20 @@ def llm_match():
     if not questions:
         return jsonify({"error": "缺少 questions（问题模板文本）"}), 400
 
-    cats = _parse_questions_text(questions)
-    if not cats:
-        return jsonify({"error": "questions.txt 无法解析分类/题目：请使用带分类标题与题号的 questions.txt"}), 400
+    prompt = _build_qa_prompt(transcript=transcript, questions_text=questions)
+    try:
+        resp = _openrouter_chat(api_key=api_key, model=model, prompt=prompt)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    outputs: list[str] = []
-    for cat in cats:
-        title = cat.get("title") or ""
-        qlist = cat.get("questions") or []
-        if not title or not qlist:
-            continue
-        # 仅传该类别的题目块，降低单次输出长度
-        questions_block = "\n".join([f"{q['id']}. {q['text']}" for q in qlist])
-        prompt = _build_category_prompt(transcript=transcript, category_title=title, questions_block=questions_block)
-        try:
-            resp = _openrouter_chat(api_key=api_key, model=model, prompt=prompt)
-        except Exception as e:
-            return jsonify({"error": f"模型调用失败（{title}）：{e}"}), 500
-
+    content = ""
+    try:
+        content = resp["choices"][0]["message"]["content"]
+    except Exception:
         content = ""
-        try:
-            content = resp["choices"][0]["message"]["content"]
-        except Exception:
-            content = ""
-        cleaned = _strip_code_fence(content)
-        outputs.append(cleaned.strip())
 
-    final_text = "\n\n".join([o for o in outputs if o]).strip()
-    return jsonify({"model": model, "cleaned": final_text})
+    cleaned = _strip_code_fence(content)
+    return jsonify({"model": model, "cleaned": cleaned})
 
 @app.get("/api/health")
 def health():
