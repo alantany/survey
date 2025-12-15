@@ -174,6 +174,16 @@
         .status.error {
             background: #ffebee;
             color: #c62828;
+            border: 2px solid #c62828;
+            font-weight: 500;
+            position: relative;
+        }
+        
+        .status.error::after {
+            content: ' ✕ 点击关闭';
+            font-size: 12px;
+            opacity: 0.7;
+            margin-left: 10px;
         }
 
         .status.success {
@@ -197,6 +207,20 @@
 
         <div class="audio-player" id="audioPlayer">
             <audio id="audioElement" controls></audio>
+        </div>
+
+        <div style="margin-bottom: 15px; padding: 12px; background: #f8f9ff; border-radius: 8px; display: flex; align-items: center; justify-content: space-between;">
+            <label style="font-size: 14px; color: #666; font-weight: 500;">转写模式：</label>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <label style="display: flex; align-items: center; cursor: pointer; font-size: 14px;">
+                    <input type="radio" name="transcribeMode" value="local" checked style="margin-right: 6px; cursor: pointer;">
+                    <span>本地（Whisper）</span>
+                </label>
+                <label style="display: flex; align-items: center; cursor: pointer; font-size: 14px;">
+                    <input type="radio" name="transcribeMode" value="api" style="margin-right: 6px; cursor: pointer;">
+                    <span>API</span>
+                </label>
+            </div>
         </div>
 
         <div class="button-group">
@@ -315,13 +339,35 @@
         }
 
         // 显示状态信息
+        let statusTimer = null;
         function showStatus(message, type) {
+            // 清除之前的定时器
+            if (statusTimer) {
+                clearTimeout(statusTimer);
+                statusTimer = null;
+            }
+            
             status.textContent = message;
             status.className = 'status ' + type;
             status.style.display = 'block';
-            setTimeout(() => {
-                status.style.display = 'none';
-            }, 5000);
+            
+            // 错误信息不自动消失，其他信息 5 秒后消失
+            if (type === 'error') {
+                // 错误信息保持显示，用户可以手动关闭或等待下一个状态覆盖
+                // 添加点击关闭功能
+                status.style.cursor = 'pointer';
+                status.title = '点击关闭';
+                status.onclick = function() {
+                    status.style.display = 'none';
+                };
+            } else {
+                // 成功和信息提示 5 秒后自动消失
+                status.style.cursor = 'default';
+                status.onclick = null;
+                statusTimer = setTimeout(() => {
+                    status.style.display = 'none';
+                }, 5000);
+            }
         }
 
         function stopPolling() {
@@ -419,6 +465,10 @@
 
                 const form = new FormData();
                 form.append('file', audioFile, audioFile.name);
+                // 获取转写模式
+                const modeRadio = document.querySelector('input[name="transcribeMode"]:checked');
+                const mode = modeRadio ? modeRadio.value : 'local';
+                form.append('mode', mode);
 
                 const resp = await fetch('/api/transcribe', {
                     method: 'POST',

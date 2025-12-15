@@ -1,7 +1,13 @@
 {
   "openrouter_api_key": "PUT_YOUR_OPENROUTER_KEY_HERE",
   "openrouter_model": "tngtech/deepseek-r1t2-chimera:free",
-  "openrouter_max_tokens": 8192
+  "openrouter_max_tokens": 8192,
+  "stt_api_type": "xunfei",
+  "stt_api_appid": "PUT_YOUR_XUNFEI_APPID_HERE",
+  "stt_api_secret_key": "PUT_YOUR_XUNFEI_SECRET_KEY_HERE",
+  "stt_api_url": "",
+  "stt_api_key": "",
+  "stt_api_method": "POST"
 }
 
 
