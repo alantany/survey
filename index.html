@@ -213,6 +213,10 @@
         <div class="result-area" id="resultArea">
             <div class="result-label">转换结果：</div>
             <div class="result-text" id="resultText"></div>
+            <div class="button-group" style="margin-top: 10px;">
+                <button class="btn-secondary" id="copyTranscriptBtn" disabled>复制文本</button>
+                <button class="btn-secondary" id="downloadTranscriptBtn" disabled>导出 .txt</button>
+            </div>
         </div>
 
         <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
@@ -250,6 +254,8 @@
         const docxInput = document.getElementById('docxInput');
         const resultArea = document.getElementById('resultArea');
         const resultText = document.getElementById('resultText');
+        const copyTranscriptBtn = document.getElementById('copyTranscriptBtn');
+        const downloadTranscriptBtn = document.getElementById('downloadTranscriptBtn');
         const status = document.getElementById('status');
         const transcriptTxtInput = document.getElementById('transcriptTxtInput');
         const questionsTxtInput = document.getElementById('questionsTxtInput');
@@ -266,6 +272,47 @@
         let lastMatchContent = '';
         let matchLoadingTimer = null;
         let matchLoadingDots = 0;
+
+        function getTranscriptText() {
+            return String(resultText.textContent || '').trim();
+        }
+
+        function setTranscriptActionsEnabled(enabled) {
+            copyTranscriptBtn.disabled = !enabled;
+            downloadTranscriptBtn.disabled = !enabled;
+        }
+
+        async function copyToClipboard(text) {
+            const t = String(text || '');
+            if (!t) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(t);
+                return;
+            }
+            // fallback
+            const ta = document.createElement('textarea');
+            ta.value = t;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            ta.style.top = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            document.execCommand('copy');
+            ta.remove();
+        }
+
+        function downloadTextAsFile(text, filename) {
+            const blob = new Blob([String(text || '')], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        }
 
         // 显示状态信息
         function showStatus(message, type) {
@@ -343,6 +390,7 @@
             audioPlayer.style.display = 'block';
             transcribeBtn.disabled = !backendReady ? true : false;
             bundleBtn.disabled = true;
+            setTranscriptActionsEnabled(false);
             resultText.textContent = '';
             resultArea.style.display = 'none';
             showStatus('文件已加载，点击“开始转文字”上传并离线转写（1小时音频可能需要较长时间）', 'info');
@@ -362,6 +410,7 @@
             stopPolling();
             resultText.textContent = '';
             resultArea.style.display = 'block';
+            setTranscriptActionsEnabled(false);
 
             try {
                 transcribeBtn.disabled = true;
@@ -416,6 +465,7 @@
                             transcribeBtn.disabled = false;
                             transcribeBtn.textContent = '开始转文字';
                             bundleBtn.disabled = false;
+                            setTranscriptActionsEnabled(!!getTranscriptText());
                             return;
                         }
                         if (jd.status === 'error') {
@@ -424,6 +474,7 @@
                             transcribeBtn.disabled = false;
                             transcribeBtn.textContent = '开始转文字';
                             bundleBtn.disabled = true;
+                            setTranscriptActionsEnabled(false);
                             return;
                         }
                         // queued / running：上面已处理 message/progress
@@ -491,10 +542,37 @@
             resultArea.style.display = 'none';
             transcribeBtn.disabled = true;
             bundleBtn.disabled = true;
+            setTranscriptActionsEnabled(false);
             fileInput.value = '';
             stopPolling();
             lastLog = '';
             showStatus('已清空', 'info');
+        });
+
+        copyTranscriptBtn.addEventListener('click', async () => {
+            const text = getTranscriptText();
+            if (!text) {
+                showStatus('没有可复制的转写文本（请先完成转写）', 'error');
+                return;
+            }
+            try {
+                await copyToClipboard(text);
+                showStatus('已复制到剪贴板', 'success');
+            } catch (e) {
+                showStatus('复制失败：' + (e && e.message ? e.message : 'unknown'), 'error');
+            }
+        });
+
+        downloadTranscriptBtn.addEventListener('click', () => {
+            const text = getTranscriptText();
+            if (!text) {
+                showStatus('没有可导出的转写文本（请先完成转写）', 'error');
+                return;
+            }
+            const baseName = audioFile && audioFile.name ? audioFile.name.replace(/\.[^/.]+$/, '') : 'transcript';
+            const suffix = currentJobId ? `-${currentJobId}` : '';
+            downloadTextAsFile(text, `${baseName}${suffix}.txt`);
+            showStatus('已导出转写 .txt', 'success');
         });
 
         // 页面加载：检测后端
