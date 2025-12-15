@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>语音转文字工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #f8f9ff;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: #e8ebff;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .upload-text {
+            color: #666;
+            font-size: 16px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .audio-player {
+            margin: 20px 0;
+            display: none;
+        }
+
+        .audio-player audio {
+            width: 100%;
+            outline: none;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+        .result-area {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .result-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        .result-text {
+            background: #f8f9ff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            min-height: 100px;
+            max-height: 300px;
+            overflow-y: auto;
+            color: #333;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .status.info {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 语音转文字工具</h1>
+        
+        <div id="status" class="status"></div>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📁</div>
+            <div class="upload-text">点击或拖拽音频文件到这里</div>
+            <div class="upload-text" style="font-size: 12px; margin-top: 5px;">支持 MP3, WAV, OGG 等格式</div>
+        </div>
+        <input type="file" id="fileInput" accept="audio/*">
+
+        <div class="audio-player" id="audioPlayer">
+            <audio id="audioElement" controls></audio>
+        </div>
+
+        <div class="button-group">
+            <button class="btn-primary" id="transcribeBtn" disabled>开始转文字</button>
+            <button class="btn-secondary" id="clearBtn">清空</button>
+        </div>
+
+        <div class="result-area" id="resultArea">
+            <div class="result-label">转换结果：</div>
+            <div class="result-text" id="resultText"></div>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const audioElement = document.getElementById('audioElement');
+        const transcribeBtn = document.getElementById('transcribeBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const resultArea = document.getElementById('resultArea');
+        const resultText = document.getElementById('resultText');
+        const status = document.getElementById('status');
+
+        let audioFile = null;
+        let currentJobId = null;
+        let pollTimer = null;
+        let backendReady = false;
+        let lastLog = '';
+
+        // 显示状态信息
+        function showStatus(message, type) {
+            status.textContent = message;
+            status.className = 'status ' + type;
+            status.style.display = 'block';
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 5000);
+        }
+
+        function stopPolling() {
+            if (pollTimer) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+            currentJobId = null;
+        }
+
+        async function checkBackend() {
+            try {
+                const resp = await fetch('/api/health', { method: 'GET' });
+                if (!resp.ok) throw new Error('health not ok');
+                backendReady = true;
+                showStatus('本地服务已连接（离线转写模式）', 'success');
+            } catch (e) {
+                backendReady = false;
+                transcribeBtn.disabled = true;
+                showStatus('未检测到本地服务：请先运行 python backend/app.py，再用 http://127.0.0.1:8000 打开本页面', 'error');
+            }
+        }
+
+        // 点击上传区域
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // 拖拽上传
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        // 文件选择
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        // 处理文件
+        function handleFile(file) {
+            if (!file.type.startsWith('audio/')) {
+                showStatus('请选择音频文件', 'error');
+                return;
+            }
+
+            audioFile = file;
+            const url = URL.createObjectURL(file);
+            audioElement.src = url;
+            audioPlayer.style.display = 'block';
+            transcribeBtn.disabled = !backendReady ? true : false;
+            resultText.textContent = '';
+            resultArea.style.display = 'none';
+            showStatus('文件已加载，点击“开始转文字”上传并离线转写（1小时音频可能需要较长时间）', 'info');
+        }
+
+        // 开始转文字
+        transcribeBtn.addEventListener('click', async () => {
+            if (!backendReady) {
+                showStatus('本地服务未就绪：请先运行 python backend/app.py', 'error');
+                return;
+            }
+            if (!audioFile) {
+                showStatus('请先上传音频文件', 'error');
+                return;
+            }
+
+            stopPolling();
+            resultText.textContent = '';
+            resultArea.style.display = 'block';
+
+            try {
+                transcribeBtn.disabled = true;
+                transcribeBtn.textContent = '上传中...';
+                showStatus('开始上传音频（大文件可能需要一会儿）...', 'info');
+
+                const form = new FormData();
+                form.append('file', audioFile, audioFile.name);
+
+                const resp = await fetch('/api/transcribe', {
+                    method: 'POST',
+                    body: form
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) {
+                    const msg = data && data.error ? data.error : '提交任务失败';
+                    throw new Error(msg);
+                }
+                currentJobId = data.job_id;
+                transcribeBtn.textContent = '转写中...';
+                showStatus('已提交转写任务，处理中…（可切到后台等待）', 'info');
+
+                pollTimer = setInterval(async () => {
+                    try {
+                        const jr = await fetch(`/api/jobs/${currentJobId}`, { method: 'GET' });
+                        const jd = await jr.json().catch(() => ({}));
+                        if (!jr.ok) throw new Error(jd && jd.error ? jd.error : '获取任务状态失败');
+
+                        if (typeof jd.progress === 'number') {
+                            showStatus(`处理中… ${jd.progress}%`, 'info');
+                        } else if (jd.message) {
+                            showStatus(jd.message, 'info');
+                        }
+
+                        if (Array.isArray(jd.log_tail) && jd.log_tail.length > 0) {
+                            // 将日志尾部展示在结果区域（不影响最终文本）
+                            const logText = jd.log_tail.join('\n');
+                            if (logText !== lastLog) {
+                                lastLog = logText;
+                                // 如果转写文本尚为空，则先显示日志；完成后会被结果覆盖
+                                if (!resultText.textContent) {
+                                    resultText.textContent = logText;
+                                }
+                            }
+                        }
+
+                        if (jd.status === 'done') {
+                            resultText.textContent = jd.text || '';
+                            showStatus('转写完成', 'success');
+                            stopPolling();
+                            transcribeBtn.disabled = false;
+                            transcribeBtn.textContent = '开始转文字';
+                            return;
+                        }
+                        if (jd.status === 'error') {
+                            showStatus(jd.message || '转写失败', 'error');
+                            stopPolling();
+                            transcribeBtn.disabled = false;
+                            transcribeBtn.textContent = '开始转文字';
+                            return;
+                        }
+                        // queued / running：上面已处理 message/progress
+                    } catch (e) {
+                        showStatus('轮询失败：' + (e && e.message ? e.message : 'unknown'), 'error');
+                        stopPolling();
+                        transcribeBtn.disabled = false;
+                        transcribeBtn.textContent = '开始转文字';
+                    }
+                }, 1500);
+            } catch (e) {
+                showStatus('提交失败：' + (e && e.message ? e.message : 'unknown'), 'error');
+                transcribeBtn.disabled = false;
+                transcribeBtn.textContent = '开始转文字';
+            }
+        });
+
+        // 清空
+        clearBtn.addEventListener('click', () => {
+            audioFile = null;
+            audioElement.src = '';
+            audioPlayer.style.display = 'none';
+            resultText.textContent = '';
+            resultArea.style.display = 'none';
+            transcribeBtn.disabled = true;
+            fileInput.value = '';
+            stopPolling();
+            lastLog = '';
+            showStatus('已清空', 'info');
+        });
+
+        // 页面加载：检测后端
+        checkBackend();
+    </script>
+</body>
+</html>
