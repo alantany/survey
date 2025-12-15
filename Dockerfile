@@ -13,7 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Build whisper.cpp (produces whisper-cli)
-RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git /build/whisper.cpp \
+# 说明：某些新版本在 ARM 上可能出现编译问题，这里固定到一个已验证可编译的版本
+RUN git clone --depth 1 --branch v1.7.6 https://github.com/ggerganov/whisper.cpp.git /build/whisper.cpp \
     && cmake -S /build/whisper.cpp -B /build/whisper.cpp/build -DCMAKE_BUILD_TYPE=Release \
     && cmake --build /build/whisper.cpp/build -j
 
