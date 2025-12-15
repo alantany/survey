@@ -212,6 +212,33 @@
             <div class="result-label">转换结果：</div>
             <div class="result-text" id="resultText"></div>
         </div>
+
+        <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
+
+        <div class="result-label">LLM 匹配（OpenRouter / DeepSeek）</div>
+        <div class="upload-text" style="font-size: 12px; margin: 6px 0 12px; color:#666;">
+            选择 <b>录音.txt</b>（转写）和 <b>questions.txt</b>（问题模板），输入 OpenRouter API Key，点击开始匹配。
+        </div>
+
+        <div style="display:flex; gap:10px; margin-bottom:10px;">
+            <input id="apiKeyInput" type="password" placeholder="OpenRouter API Key（只用于本次请求，不会保存）" style="flex:2; padding:10px; border:1px solid #ddd; border-radius:8px;">
+            <input id="modelInput" type="text" value="deepseek/deepseek-chat" style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px;">
+        </div>
+
+        <div style="display:flex; gap:10px; margin-bottom:10px;">
+            <input id="transcriptTxtInput" type="file" accept=".txt" style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px;">
+            <input id="questionsTxtInput" type="file" accept=".txt,.json" style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px;">
+        </div>
+
+        <div class="button-group">
+            <button class="btn-primary" id="runMatchBtn">开始匹配</button>
+            <button class="btn-secondary" id="downloadMatchBtn" disabled>下载结果</button>
+        </div>
+
+        <div class="result-area" id="matchArea" style="display:none;">
+            <div class="result-label">匹配结果（模型原始输出）：</div>
+            <div class="result-text" id="matchText"></div>
+        </div>
     </div>
 
     <script>
@@ -226,12 +253,21 @@
         const resultArea = document.getElementById('resultArea');
         const resultText = document.getElementById('resultText');
         const status = document.getElementById('status');
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const modelInput = document.getElementById('modelInput');
+        const transcriptTxtInput = document.getElementById('transcriptTxtInput');
+        const questionsTxtInput = document.getElementById('questionsTxtInput');
+        const runMatchBtn = document.getElementById('runMatchBtn');
+        const downloadMatchBtn = document.getElementById('downloadMatchBtn');
+        const matchArea = document.getElementById('matchArea');
+        const matchText = document.getElementById('matchText');
 
         let audioFile = null;
         let currentJobId = null;
         let pollTimer = null;
         let backendReady = false;
         let lastLog = '';
+        let lastMatchContent = '';
 
         // 显示状态信息
         function showStatus(message, type) {
@@ -465,6 +501,86 @@
 
         // 页面加载：检测后端
         checkBackend();
+
+        async function readFileAsText(file) {
+            return await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result || ''));
+                reader.onerror = reject;
+                reader.readAsText(file, 'utf-8');
+            });
+        }
+
+        runMatchBtn.addEventListener('click', async () => {
+            if (!backendReady) {
+                showStatus('本地服务未就绪：请先运行 python backend/app.py', 'error');
+                return;
+            }
+            const apiKey = (apiKeyInput.value || '').trim();
+            const model = (modelInput.value || '').trim() || 'deepseek/deepseek-chat';
+            const transcriptFile = transcriptTxtInput.files && transcriptTxtInput.files[0] ? transcriptTxtInput.files[0] : null;
+            const questionsFile = questionsTxtInput.files && questionsTxtInput.files[0] ? questionsTxtInput.files[0] : null;
+
+            if (!apiKey) {
+                showStatus('请填写 OpenRouter API Key', 'error');
+                return;
+            }
+            if (!transcriptFile) {
+                showStatus('请选择 录音.txt（转写文本）', 'error');
+                return;
+            }
+            if (!questionsFile) {
+                showStatus('请选择 questions.txt 或 questions.json（问题模板）', 'error');
+                return;
+            }
+
+            try {
+                runMatchBtn.disabled = true;
+                downloadMatchBtn.disabled = true;
+                matchArea.style.display = 'none';
+                matchText.textContent = '';
+                showStatus('正在调用大模型匹配中…（可能需要几十秒）', 'info');
+
+                const transcript = await readFileAsText(transcriptFile);
+                const questions = await readFileAsText(questionsFile);
+
+                const resp = await fetch('/api/llm/match', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: apiKey, model, transcript, questions })
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) {
+                    throw new Error(data && data.error ? data.error : '调用失败');
+                }
+
+                lastMatchContent = data.content || '';
+                matchText.textContent = lastMatchContent || JSON.stringify(data.raw || {}, null, 2);
+                matchArea.style.display = 'block';
+                downloadMatchBtn.disabled = false;
+                showStatus('匹配完成', 'success');
+            } catch (e) {
+                showStatus('匹配失败：' + (e && e.message ? e.message : 'unknown'), 'error');
+            } finally {
+                runMatchBtn.disabled = false;
+            }
+        });
+
+        downloadMatchBtn.addEventListener('click', () => {
+            if (!lastMatchContent) {
+                showStatus('没有可下载的结果', 'error');
+                return;
+            }
+            const blob = new Blob([lastMatchContent], { type: 'application/json;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'qa_match_result.json';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        });
     </script>
 </body>
 </html>

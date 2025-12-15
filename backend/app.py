@@ -6,6 +6,8 @@ import threading
 import subprocess
 import shutil
 import re
+import urllib.request
+import urllib.error
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory, send_file
@@ -390,6 +392,100 @@ def _extract_full_text_from_docx(docx_path: Path) -> str:
     return "\n".join(lines)
 
 
+def _build_qa_prompt(transcript: str, questions_text: str) -> str:
+    # 目标：让模型直接输出“问题->答案”的严格 JSON，便于后续落库/检索
+    return f"""你是一个严谨的定性研究助理。现在有两份文本：
+
+【问题模板 questions】：
+{questions_text}
+
+【采访转写 transcript】：
+{transcript}
+
+任务：
+1) 识别并区分“采访者/受访者”的说话段落（转写里没有显式标记，请你根据语气、问句/追问、承接关系推断；不确定就标记为 unknown）。
+2) 按照 questions 的题号，把 transcript 中“受访者的回答内容”匹配到对应问题下。
+3) 每个问题输出：
+   - answer: 归纳后的答案（尽量忠实，中文）
+   - evidence: 2~5 条原文证据（尽量逐字引用，附带你推断的 speaker=interviewer/interviewee/unknown）
+   - confidence: 0~1
+4) 如果 transcript 里找不到某题答案，answer 为空字符串，confidence=0，并在 notes 说明缺失原因。
+
+输出要求（非常重要）：
+- 只能输出**一个 JSON 对象**，不要输出任何多余文字，不要 Markdown。
+- JSON 结构如下（字段名必须一致）：
+{{
+  "meta": {{
+    "language": "zh-CN",
+    "speaker_note": "说明你如何区分采访者/受访者"
+  }},
+  "results": [
+    {{
+      "category": "学龄前/学龄期/成年及以上/非结构化（来自 questions 的标题）",
+      "questions": [
+        {{
+          "id": "1",
+          "question": "问题原文",
+          "answer": "归纳答案",
+          "evidence": [
+            {{"speaker":"interviewee","quote":"..."}},
+            {{"speaker":"unknown","quote":"..."}}
+          ],
+          "confidence": 0.0,
+          "notes": ""
+        }}
+      ]
+    }}
+  ],
+  "unmatched": [
+    {{
+      "speaker": "unknown",
+      "quote": "未能归类到任何问题的重要片段（可选）"
+    }}
+  ]
+}}
+"""
+
+
+def _openrouter_chat(api_key: str, model: str, prompt: str) -> dict:
+    """
+    OpenRouter（OpenAI 兼容）接口：
+    POST https://openrouter.ai/api/v1/chat/completions
+    """
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "你是一个擅长定性访谈分析与信息抽取的助手。"},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.2,
+        "max_tokens": 4096,
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url=url,
+        data=data,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            # OpenRouter 推荐带上这两个 header（可选）
+            "HTTP-Referer": "http://127.0.0.1:8000",
+            "X-Title": "Local Survey Tool",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            raw = resp.read().decode("utf-8", errors="ignore")
+            return json.loads(raw)
+    except urllib.error.HTTPError as e:
+        raw = e.read().decode("utf-8", errors="ignore") if hasattr(e, "read") else str(e)
+        raise RuntimeError(f"OpenRouter HTTPError: {e.code} {raw}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"OpenRouter URLError: {e}")
+
+
 @app.post("/api/bundle")
 def make_bundle():
     """
@@ -440,6 +536,47 @@ def make_bundle():
         mimetype="application/json; charset=utf-8",
         as_attachment=True,
         download_name=f"bundle-{job_id}.json",
+    )
+
+
+@app.post("/api/llm/match")
+def llm_match():
+    """
+    通过 OpenRouter 调用大模型做“问题-答案匹配”。
+    注意：不保存 key，不做持久化，只做一次请求。
+    """
+    body = request.get_json(silent=True) or {}
+    api_key = (body.get("api_key") or "").strip()
+    model = (body.get("model") or "").strip() or "deepseek/deepseek-chat"
+    transcript = (body.get("transcript") or "").strip()
+    questions = (body.get("questions") or "").strip()
+
+    if not api_key:
+        return jsonify({"error": "缺少 api_key（OpenRouter API Key）"}), 400
+    if not transcript:
+        return jsonify({"error": "缺少 transcript（录音转写文本）"}), 400
+    if not questions:
+        return jsonify({"error": "缺少 questions（问题模板文本）"}), 400
+
+    prompt = _build_qa_prompt(transcript=transcript, questions_text=questions)
+    try:
+        resp = _openrouter_chat(api_key=api_key, model=model, prompt=prompt)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    # 兼容 OpenAI 风格响应
+    content = ""
+    try:
+        content = resp["choices"][0]["message"]["content"]
+    except Exception:
+        content = ""
+
+    return jsonify(
+        {
+            "model": model,
+            "raw": resp,
+            "content": content,
+        }
     )
 
 @app.get("/api/health")
