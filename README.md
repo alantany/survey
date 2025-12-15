@@ -57,6 +57,18 @@ python backend/app.py
 3. 点击“开始转文字”
 4. 等待转写完成（1 小时音频可能需要较长时间）
 
+## LLM 匹配（OpenRouter / DeepSeek）
+
+你可以把 `录音.txt`（转写文本） + `questions.txt`（问题模板）通过 OpenRouter 调用大模型，输出“问题-答案匹配”的 JSON 结果。
+
+1. 在页面下方找到 **LLM 匹配（OpenRouter / DeepSeek）**
+2. 输入 **OpenRouter API Key**
+3. 填写模型名（默认：`deepseek/deepseek-chat`）
+4. 选择两个文件：`录音.txt` 和 `questions.txt`（或 `questions.json`）
+5. 点击“开始匹配”，完成后可“下载结果”
+
+> 说明：API Key 仅在本次请求中使用，不会写入本地文件或持久化保存。
+
 ## 环境变量（可选）
 
 - **WHISPER_BIN**：whisper 可执行文件名/路径，默认 `whisper-cpp`
