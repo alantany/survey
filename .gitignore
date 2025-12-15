@@ -26,3 +26,7 @@ survey/
 # Logs
 *.log
 
+# Local secrets / config (do NOT commit)
+config.json
+.env
+

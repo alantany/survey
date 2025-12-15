@@ -61,10 +61,22 @@ python backend/app.py
 
 你可以把 `录音.txt`（转写文本） + `questions.txt`（问题模板）通过 OpenRouter 调用大模型，输出“问题-答案匹配”的 JSON 结果。
 
+### 一次性配置（普通用户只做一次）
+
+在项目根目录复制一份配置文件：
+
+```bash
+cp config.example.json config.json
+```
+
+编辑 `config.json`，填入：
+- `openrouter_api_key`
+- `openrouter_model`（默认已给出一个免费模型）
+
+> `config.json` 已被 `.gitignore` 忽略，不会同步到 GitHub。
+
 1. 在页面下方找到 **LLM 匹配（OpenRouter / DeepSeek）**
-2. 输入 **OpenRouter API Key**
-3. 填写模型名（默认：`deepseek/deepseek-chat`）
-4. 选择两个文件：`录音.txt` 和 `questions.txt`（或 `questions.json`）
+2. 选择两个文件：`录音.txt` 和 `questions.txt`
 5. 点击“开始匹配”，完成后可“下载结果”
 
 > 说明：API Key 仅在本次请求中使用，不会写入本地文件或持久化保存。

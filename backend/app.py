@@ -19,6 +19,7 @@ DATA_DIR = ROOT_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 WORK_DIR = DATA_DIR / "work"
 SURVEY_DIR = ROOT_DIR / "survey"
+CONFIG_PATH = ROOT_DIR / "config.json"
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 WORK_DIR.mkdir(parents=True, exist_ok=True)
@@ -56,6 +57,37 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH_MB * 1024 * 1024
 
 _jobs_lock = threading.Lock()
 _jobs: dict[str, dict] = {}
+
+
+def _load_local_config() -> dict:
+    """
+    读取本地 config.json（被 .gitignore 忽略）或环境变量。
+    - OPENROUTER_API_KEY
+    - OPENROUTER_MODEL
+    """
+    cfg: dict = {}
+    try:
+        if CONFIG_PATH.exists():
+            cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        cfg = {}
+
+    api_key = (cfg.get("openrouter_api_key") if isinstance(cfg, dict) else None) or os.environ.get("OPENROUTER_API_KEY")
+    model = (cfg.get("openrouter_model") if isinstance(cfg, dict) else None) or os.environ.get("OPENROUTER_MODEL") or "tngtech/deepseek-r1t2-chimera:free"
+    return {"openrouter_api_key": (api_key or "").strip(), "openrouter_model": (model or "").strip()}
+
+
+def _strip_code_fence(s: str) -> str:
+    """
+    去掉常见的 ```json ... ``` 包裹，便于解析 JSON。
+    """
+    t = (s or "").strip()
+    if t.startswith("```"):
+        # ```json\n...\n``` 或 ```\n...\n```
+        t = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", t)
+        t = re.sub(r"\s*```$", "", t)
+        t = t.strip()
+    return t
 
 def _safe_basename(name: str) -> str:
     """
@@ -546,13 +578,15 @@ def llm_match():
     注意：不保存 key，不做持久化，只做一次请求。
     """
     body = request.get_json(silent=True) or {}
-    api_key = (body.get("api_key") or "").strip()
-    model = (body.get("model") or "").strip() or "deepseek/deepseek-chat"
     transcript = (body.get("transcript") or "").strip()
     questions = (body.get("questions") or "").strip()
 
+    cfg = _load_local_config()
+    api_key = cfg.get("openrouter_api_key", "")
+    model = cfg.get("openrouter_model", "tngtech/deepseek-r1t2-chimera:free")
+
     if not api_key:
-        return jsonify({"error": "缺少 api_key（OpenRouter API Key）"}), 400
+        return jsonify({"error": "未配置 OpenRouter API Key：请在项目根目录创建 config.json（参考 config.example.json）"}), 400
     if not transcript:
         return jsonify({"error": "缺少 transcript（录音转写文本）"}), 400
     if not questions:
@@ -571,11 +605,19 @@ def llm_match():
     except Exception:
         content = ""
 
+    cleaned = _strip_code_fence(content)
+    parsed = None
+    try:
+        parsed = json.loads(cleaned) if cleaned else None
+    except Exception:
+        parsed = None
+
     return jsonify(
         {
             "model": model,
-            "raw": resp,
             "content": content,
+            "cleaned": cleaned,
+            "parsed": parsed,
         }
     )
 

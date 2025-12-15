@@ -197,15 +197,10 @@
             <button class="btn-secondary" id="clearBtn">清空</button>
         </div>
 
-        <div class="button-group">
+        <div style="display:none;">
+            <!-- 历史功能：docx bundle（已隐藏，避免用户误以为只能选 docx） -->
             <button class="btn-secondary" id="bundleBtn" disabled>导出给LLM（docx+文本）</button>
-        </div>
-
-        <div style="margin-top: 10px;">
-            <input type="file" id="docxInput" accept=".docx" style="display: block; width: 100%;" />
-            <div class="upload-text" style="font-size: 12px; margin-top: 6px; color: #666;">
-                选择访谈提纲（.docx），然后点“导出给LLM”，会下载一个 bundle-xxxx.json（包含 questions + transcript）。
-            </div>
+            <input type="file" id="docxInput" accept=".docx" />
         </div>
 
         <div class="result-area" id="resultArea">
@@ -217,17 +212,13 @@
 
         <div class="result-label">LLM 匹配（OpenRouter / DeepSeek）</div>
         <div class="upload-text" style="font-size: 12px; margin: 6px 0 12px; color:#666;">
-            选择 <b>录音.txt</b>（转写）和 <b>questions.txt</b>（问题模板），输入 OpenRouter API Key，点击开始匹配。
-        </div>
-
-        <div style="display:flex; gap:10px; margin-bottom:10px;">
-            <input id="apiKeyInput" type="password" placeholder="OpenRouter API Key（只用于本次请求，不会保存）" style="flex:2; padding:10px; border:1px solid #ddd; border-radius:8px;">
-            <input id="modelInput" type="text" value="deepseek/deepseek-chat" style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px;">
+            选择 <b>录音.txt</b>（转写）和 <b>questions.txt</b>（问题模板），点击开始匹配。
+            <br/>说明：API Key/模型已保存在本地 <code>config.json</code>（不会提交到 GitHub）。
         </div>
 
         <div style="display:flex; gap:10px; margin-bottom:10px;">
             <input id="transcriptTxtInput" type="file" accept=".txt" style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px;">
-            <input id="questionsTxtInput" type="file" accept=".txt,.json" style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px;">
+            <input id="questionsTxtInput" type="file" accept=".txt" style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px;">
         </div>
 
         <div class="button-group">
@@ -253,8 +244,6 @@
         const resultArea = document.getElementById('resultArea');
         const resultText = document.getElementById('resultText');
         const status = document.getElementById('status');
-        const apiKeyInput = document.getElementById('apiKeyInput');
-        const modelInput = document.getElementById('modelInput');
         const transcriptTxtInput = document.getElementById('transcriptTxtInput');
         const questionsTxtInput = document.getElementById('questionsTxtInput');
         const runMatchBtn = document.getElementById('runMatchBtn');
@@ -516,21 +505,15 @@
                 showStatus('本地服务未就绪：请先运行 python backend/app.py', 'error');
                 return;
             }
-            const apiKey = (apiKeyInput.value || '').trim();
-            const model = (modelInput.value || '').trim() || 'deepseek/deepseek-chat';
             const transcriptFile = transcriptTxtInput.files && transcriptTxtInput.files[0] ? transcriptTxtInput.files[0] : null;
             const questionsFile = questionsTxtInput.files && questionsTxtInput.files[0] ? questionsTxtInput.files[0] : null;
 
-            if (!apiKey) {
-                showStatus('请填写 OpenRouter API Key', 'error');
-                return;
-            }
             if (!transcriptFile) {
                 showStatus('请选择 录音.txt（转写文本）', 'error');
                 return;
             }
             if (!questionsFile) {
-                showStatus('请选择 questions.txt 或 questions.json（问题模板）', 'error');
+                showStatus('请选择 questions.txt（问题模板）', 'error');
                 return;
             }
 
@@ -547,15 +530,16 @@
                 const resp = await fetch('/api/llm/match', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ api_key: apiKey, model, transcript, questions })
+                    body: JSON.stringify({ transcript, questions })
                 });
                 const data = await resp.json().catch(() => ({}));
                 if (!resp.ok) {
                     throw new Error(data && data.error ? data.error : '调用失败');
                 }
 
-                lastMatchContent = data.content || '';
-                matchText.textContent = lastMatchContent || JSON.stringify(data.raw || {}, null, 2);
+                // 优先展示可解析 JSON（cleaned/parsed），否则展示原始 content
+                lastMatchContent = data.cleaned || data.content || '';
+                matchText.textContent = data.parsed ? JSON.stringify(data.parsed, null, 2) : (lastMatchContent || '');
                 matchArea.style.display = 'block';
                 downloadMatchBtn.disabled = false;
                 showStatus('匹配完成', 'success');
