@@ -100,6 +100,12 @@
             font-weight: 500;
         }
 
+        .btn-loading {
+            position: relative;
+            pointer-events: none;
+            opacity: 0.85;
+        }
+
         .btn-primary {
             background: #667eea;
             color: white;
@@ -258,6 +264,8 @@
         let backendReady = false;
         let lastLog = '';
         let lastMatchContent = '';
+        let matchLoadingTimer = null;
+        let matchLoadingDots = 0;
 
         // 显示状态信息
         function showStatus(message, type) {
@@ -501,6 +509,30 @@
             });
         }
 
+        function setMatchLoading(isLoading) {
+            if (isLoading) {
+                runMatchBtn.disabled = true;
+                runMatchBtn.classList.add('btn-loading');
+                downloadMatchBtn.disabled = true;
+                let base = '匹配中';
+                runMatchBtn.textContent = base + '...';
+                matchLoadingDots = 0;
+                if (matchLoadingTimer) clearInterval(matchLoadingTimer);
+                matchLoadingTimer = setInterval(() => {
+                    matchLoadingDots = (matchLoadingDots + 1) % 4;
+                    runMatchBtn.textContent = base + '.'.repeat(matchLoadingDots);
+                }, 400);
+            } else {
+                if (matchLoadingTimer) {
+                    clearInterval(matchLoadingTimer);
+                    matchLoadingTimer = null;
+                }
+                runMatchBtn.disabled = false;
+                runMatchBtn.classList.remove('btn-loading');
+                runMatchBtn.textContent = '开始匹配';
+            }
+        }
+
         runMatchBtn.addEventListener('click', async () => {
             if (!backendReady) {
                 showStatus('本地服务未就绪：请先运行 python backend/app.py', 'error');
@@ -519,8 +551,7 @@
             }
 
             try {
-                runMatchBtn.disabled = true;
-                downloadMatchBtn.disabled = true;
+                setMatchLoading(true);
                 matchArea.style.display = 'none';
                 matchText.textContent = '';
                 showStatus('正在调用大模型匹配中…（可能需要几十秒）', 'info');
@@ -546,7 +577,7 @@
             } catch (e) {
                 showStatus('匹配失败：' + (e && e.message ? e.message : 'unknown'), 'error');
             } finally {
-                runMatchBtn.disabled = false;
+                setMatchLoading(false);
             }
         });
 
