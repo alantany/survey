@@ -1036,7 +1036,8 @@ def _worker(job_id: str, src_path: Path, mode: str = "local"):
     转写工作线程。
     mode: "local" 使用本地 whisper-cli，"api" 使用外部 STT API
     """
-    _set_job(job_id, status="running", message="开始处理音频…", started_at=time.time())
+    transcribe_start_time = time.time()
+    _set_job(job_id, status="running", message="开始处理音频…", started_at=transcribe_start_time)
     try:
         if mode == "api":
             # API 模式：直接使用原始文件或转换为 WAV
@@ -1054,7 +1055,9 @@ def _worker(job_id: str, src_path: Path, mode: str = "local"):
                 return
 
             text = result
-            _set_job(job_id, status="done", message="完成", text=text, finished_at=time.time())
+            transcribe_end_time = time.time()
+            transcribe_duration = transcribe_end_time - transcribe_start_time
+            _set_job(job_id, status="done", message="完成", text=text, finished_at=transcribe_end_time, transcribe_duration=transcribe_duration)
 
         else:
             # 本地模式（默认）：使用 whisper-cli
@@ -1088,7 +1091,9 @@ def _worker(job_id: str, src_path: Path, mode: str = "local"):
                     txt_path = alt
 
             text = txt_path.read_text(encoding="utf-8", errors="ignore") if txt_path.exists() else ""
-            _set_job(job_id, status="done", message="完成", text=text, finished_at=time.time(), log=whisper_log)
+            transcribe_end_time = time.time()
+            transcribe_duration = transcribe_end_time - transcribe_start_time
+            _set_job(job_id, status="done", message="完成", text=text, finished_at=transcribe_end_time, transcribe_duration=transcribe_duration, log=whisper_log)
 
         # 额外：在 survey/ 目录落一份结果，方便你在"访谈材料目录"直接看到输出
         original_name = (_get_job(job_id) or {}).get("original_filename") or f"{job_id}{src_path.suffix}"
@@ -1180,6 +1185,7 @@ def job(job_id: str):
         "progress": j.get("progress"),
         "text": j.get("text", ""),
         "log_tail": j.get("log_tail", []),
+        "transcribe_duration": j.get("transcribe_duration"),
     }
     return jsonify(resp)
 
@@ -1413,10 +1419,13 @@ def llm_match():
         return jsonify({"error": "缺少 questions（问题模板文本）"}), 400
 
     prompt = _build_qa_prompt(transcript=transcript, questions_text=questions)
+    match_start_time = time.time()
     try:
         resp = _openrouter_chat(api_key=api_key, model=model, prompt=prompt, max_tokens=max_tokens)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    match_end_time = time.time()
+    match_duration = match_end_time - match_start_time
 
     content = ""
     finish_reason = ""
@@ -1440,6 +1449,7 @@ def llm_match():
             "finish_reason": finish_reason,
             "usage": usage,
             "cleaned": cleaned,
+            "match_duration": match_duration,
         }
     )
 

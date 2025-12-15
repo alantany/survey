@@ -510,7 +510,20 @@
 
                         if (jd.status === 'done') {
                             resultText.textContent = jd.text || '';
-                            showStatus('转写完成（文本已自动保存到 survey/ 目录）', 'success');
+                            const duration = jd.transcribe_duration;
+                            let durationMsg = '转写完成';
+                            if (duration !== undefined && duration !== null) {
+                                const seconds = Math.round(duration);
+                                const minutes = Math.floor(seconds / 60);
+                                const secs = seconds % 60;
+                                if (minutes > 0) {
+                                    durationMsg += `（耗时：${minutes}分${secs}秒）`;
+                                } else {
+                                    durationMsg += `（耗时：${seconds}秒）`;
+                                }
+                            }
+                            durationMsg += '（文本已自动保存到 survey/ 目录）';
+                            showStatus(durationMsg, 'success');
                             stopPolling();
                             transcribeBtn.disabled = false;
                             transcribeBtn.textContent = '开始转文字';
@@ -702,7 +715,20 @@
                 matchArea.style.display = 'block';
                 downloadMatchBtn.disabled = false;
                 const fr = data.finish_reason ? `，finish_reason=${data.finish_reason}` : '';
-                showStatus(`匹配完成${fr}`, 'success');
+                const matchDuration = data.match_duration;
+                let matchMsg = '匹配完成';
+                if (matchDuration !== undefined && matchDuration !== null) {
+                    const seconds = Math.round(matchDuration);
+                    const minutes = Math.floor(seconds / 60);
+                    const secs = seconds % 60;
+                    if (minutes > 0) {
+                        matchMsg += `（耗时：${minutes}分${secs}秒）`;
+                    } else {
+                        matchMsg += `（耗时：${seconds}秒）`;
+                    }
+                }
+                matchMsg += fr;
+                showStatus(matchMsg, 'success');
             } catch (e) {
                 showStatus('匹配失败：' + (e && e.message ? e.message : 'unknown'), 'error');
             } finally {
