@@ -183,6 +183,79 @@ launchctl unload -w ~/Library/LaunchAgents/com.survey.whisper.plist
 
 默认用 `http://127.0.0.1:8000` 即只在本机可访问；如果你把服务监听到 `0.0.0.0` 并打算在局域网访问，建议加上反向代理与鉴权（否则同网段的人都可能访问）。
 
+## 云端部署（OCI / Linux，方案 A：云端离线转写 + Web）
+
+> 说明：云端离线转写会比较吃 CPU，建议先从 `ggml-base.bin` 或 `ggml-small.bin` 开始；并发务必控制为 1。
+
+### 0）前提
+
+- OCI 实例能出网（用于 `docker build` 拉依赖、下载模型等）
+- 安全组/安全列表放行端口（如果要公网直连）：`8000/tcp`
+  - 更安全的方式：不开放 8000，使用 **SSH 隧道** 访问（见下方）
+
+### 1）在 OCI 上安装 Docker（如果已装可跳过）
+
+不同镜像安装方式不同；你可以先验证：
+
+```bash
+docker --version
+docker compose version
+```
+
+### 2）拉代码并准备配置
+
+```bash
+git clone https://github.com/alantany/survey.git
+cd survey
+cp config.example.json config.json
+vi config.json
+```
+
+> 注意：`config.json` 已被忽略，不会进 Git。
+
+### 3）准备模型文件（放到 models/）
+
+```bash
+mkdir -p models
+# 把 ggml-small.bin 放到 models/ 目录，例如：
+# models/ggml-small.bin
+```
+
+### 4）启动（Docker Compose）
+
+```bash
+docker compose -f docker-compose.oci.yml up -d --build
+docker compose -f docker-compose.oci.yml logs -f --tail=200
+```
+
+健康检查（容器启动后）：
+
+```bash
+curl -s http://127.0.0.1:8000/api/health | head
+```
+
+### 5）访问方式
+
+- **方式 A（推荐，更安全）**：SSH 隧道，不开放 8000
+
+```bash
+ssh -N -L 8000:127.0.0.1:8000 opc@YOUR_SERVER_IP
+```
+
+然后在本机浏览器打开：
+
+- `http://127.0.0.1:8000`
+
+- **方式 B（公网直连）**：放行 `8000/tcp` 后访问 `http://YOUR_SERVER_IP:8000`
+
+### 6）常用运维命令
+
+```bash
+docker compose -f docker-compose.oci.yml ps
+docker compose -f docker-compose.oci.yml restart
+docker compose -f docker-compose.oci.yml down
+```
+
 ## 说明
 
 - 这是**离线**方案：音频不会上传到云端

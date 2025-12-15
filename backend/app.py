@@ -624,7 +624,9 @@ def health():
 
 
 if __name__ == "__main__":
-    # 绑定 127.0.0.1：只在本机使用
+    # 默认只监听本机，云端部署时可通过环境变量打开外网监听
+    host = _env("HOST", "127.0.0.1")
     port = int(_env("PORT", "8000"))
-    app.run(host="127.0.0.1", port=port, debug=True, threaded=True)
+    debug = _env("DEBUG", "1").strip() in ("1", "true", "True", "yes", "YES")
+    app.run(host=host, port=port, debug=debug, threaded=True)
 

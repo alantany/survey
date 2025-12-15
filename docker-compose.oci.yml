@@ -1,0 +1,25 @@
+services:
+  survey-whisper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: survey-whisper:latest
+    container_name: survey-whisper
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8000"
+      DEBUG: "0"
+      WHISPER_BIN: "whisper-cli"
+      WHISPER_LANGUAGE: "zh"
+      WHISPER_MODEL: "/models/ggml-small.bin"
+      MAX_CONTENT_LENGTH_MB: "1024"
+    volumes:
+      - ./models:/models
+      - ./data:/app/data
+      - ./survey:/app/survey
+      - ./config.json:/app/config.json:ro
+
+

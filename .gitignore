@@ -28,5 +28,12 @@ survey/
 
 # Local secrets / config (do NOT commit)
 config.json
+
+# SSH keys (never commit)
+*.key
+*.pem
+
+# Local helper scripts
+oci_*.sh
 .env
 
