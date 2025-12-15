@@ -16,9 +16,11 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 WORK_DIR = DATA_DIR / "work"
+SURVEY_DIR = ROOT_DIR / "survey"
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 WORK_DIR.mkdir(parents=True, exist_ok=True)
+SURVEY_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _env(name: str, default: str) -> str:
@@ -52,6 +54,14 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH_MB * 1024 * 1024
 
 _jobs_lock = threading.Lock()
 _jobs: dict[str, dict] = {}
+
+def _safe_basename(name: str) -> str:
+    """
+    生成一个适合做文件名的 basename（尽量保留中文/英文/数字/_/-，其他替换为 _）
+    """
+    base = Path(name).stem.strip() or "audio"
+    base = re.sub(r"[^\w\u4e00-\u9fff\-]+", "_", base)
+    return base[:80] or "audio"
 
 
 def _set_job(job_id: str, **kwargs):
@@ -242,6 +252,11 @@ def _worker(job_id: str, src_path: Path):
 
         text = txt_path.read_text(encoding="utf-8", errors="ignore") if txt_path.exists() else ""
         _set_job(job_id, status="done", message="完成", text=text, finished_at=time.time(), log=whisper_log)
+
+        # 额外：在 survey/ 目录落一份结果，方便你在“访谈材料目录”直接看到输出
+        original_name = (_get_job(job_id) or {}).get("original_filename") or f"{job_id}{src_path.suffix}"
+        out_name = f"{_safe_basename(original_name)}_{job_id}.txt"
+        (SURVEY_DIR / out_name).write_text(text, encoding="utf-8")
     except Exception as e:
         _set_job(job_id, status="error", message=f"服务异常：{e}")
 
@@ -278,7 +293,13 @@ def transcribe():
     src_path = UPLOAD_DIR / f"{job_id}{suffix}"
     f.save(str(src_path))
 
-    _set_job(job_id, status="queued", message="已接收，排队中…", created_at=time.time())
+    _set_job(
+        job_id,
+        status="queued",
+        message="已接收，排队中…",
+        created_at=time.time(),
+        original_filename=f.filename,
+    )
     t = threading.Thread(target=_worker, args=(job_id, src_path), daemon=True)
     t.start()
 
@@ -359,6 +380,16 @@ def _extract_questions_from_docx(docx_path: Path) -> list[dict]:
     return questions
 
 
+def _extract_full_text_from_docx(docx_path: Path) -> str:
+    doc = Document(str(docx_path))
+    lines: list[str] = []
+    for p in doc.paragraphs:
+        t = (p.text or "").strip()
+        if t:
+            lines.append(t)
+    return "\n".join(lines)
+
+
 @app.post("/api/bundle")
 def make_bundle():
     """
@@ -386,6 +417,7 @@ def make_bundle():
 
     try:
         questions = _extract_questions_from_docx(docx_path)
+        docx_text = _extract_full_text_from_docx(docx_path)
     except Exception as e:
         return jsonify({"error": f"解析 docx 失败：{e}"}), 400
 
@@ -393,6 +425,9 @@ def make_bundle():
     payload = {
         "job_id": job_id,
         "docx_name": f.filename,
+        # 你可以把 docx_text 直接喂给你的大模型（比我用正则抽题更“语义完整”）
+        "docx_text": docx_text,
+        # 同时保留我抽取的结构化 questions，用于约束/校验（可选使用）
         "questions": questions,
         "transcript": transcript,
     }

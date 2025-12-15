@@ -198,7 +198,6 @@
         </div>
 
         <div class="button-group">
-            <button class="btn-secondary" id="downloadTxtBtn" disabled>下载转写文本</button>
             <button class="btn-secondary" id="bundleBtn" disabled>导出给LLM（docx+文本）</button>
         </div>
 
@@ -222,7 +221,6 @@
         const audioElement = document.getElementById('audioElement');
         const transcribeBtn = document.getElementById('transcribeBtn');
         const clearBtn = document.getElementById('clearBtn');
-        const downloadTxtBtn = document.getElementById('downloadTxtBtn');
         const bundleBtn = document.getElementById('bundleBtn');
         const docxInput = document.getElementById('docxInput');
         const resultArea = document.getElementById('resultArea');
@@ -262,7 +260,6 @@
             } catch (e) {
                 backendReady = false;
                 transcribeBtn.disabled = true;
-                downloadTxtBtn.disabled = true;
                 bundleBtn.disabled = true;
                 showStatus('未检测到本地服务：请先运行 python backend/app.py，再用 http://127.0.0.1:8000 打开本页面', 'error');
             }
@@ -311,7 +308,6 @@
             audioElement.src = url;
             audioPlayer.style.display = 'block';
             transcribeBtn.disabled = !backendReady ? true : false;
-            downloadTxtBtn.disabled = true;
             bundleBtn.disabled = true;
             resultText.textContent = '';
             resultArea.style.display = 'none';
@@ -352,7 +348,6 @@
                 }
                 currentJobId = data.job_id;
                 transcribeBtn.textContent = '转写中...';
-                downloadTxtBtn.disabled = true;
                 bundleBtn.disabled = true;
                 showStatus('已提交转写任务，处理中…（可切到后台等待）', 'info');
 
@@ -382,11 +377,10 @@
 
                         if (jd.status === 'done') {
                             resultText.textContent = jd.text || '';
-                            showStatus('转写完成', 'success');
+                            showStatus('转写完成（文本已自动保存到 survey/ 目录）', 'success');
                             stopPolling();
                             transcribeBtn.disabled = false;
                             transcribeBtn.textContent = '开始转文字';
-                            downloadTxtBtn.disabled = false;
                             bundleBtn.disabled = false;
                             return;
                         }
@@ -395,7 +389,6 @@
                             stopPolling();
                             transcribeBtn.disabled = false;
                             transcribeBtn.textContent = '开始转文字';
-                            downloadTxtBtn.disabled = true;
                             bundleBtn.disabled = true;
                             return;
                         }
@@ -411,17 +404,8 @@
                 showStatus('提交失败：' + (e && e.message ? e.message : 'unknown'), 'error');
                 transcribeBtn.disabled = false;
                 transcribeBtn.textContent = '开始转文字';
-                downloadTxtBtn.disabled = true;
                 bundleBtn.disabled = true;
             }
-        });
-
-        downloadTxtBtn.addEventListener('click', () => {
-            if (!currentJobId) {
-                showStatus('没有可下载的任务，请先转写完成', 'error');
-                return;
-            }
-            window.location.href = `/api/jobs/${currentJobId}/download`;
         });
 
         bundleBtn.addEventListener('click', async () => {
@@ -472,7 +456,6 @@
             resultText.textContent = '';
             resultArea.style.display = 'none';
             transcribeBtn.disabled = true;
-            downloadTxtBtn.disabled = true;
             bundleBtn.disabled = true;
             fileInput.value = '';
             stopPolling();
