@@ -3,8 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>问卷调查小助手</title>
+    <title>问卷调查AI小助手</title>
     <style>
+        /* 参考 survey-assistant-ui 的视觉风格：圆角更大、玻璃拟态卡片、柔和渐变背景、主色 indigo */
+        :root {
+            /* 更贴近 survey-assistant-ui 的蓝色系（避免偏紫） */
+            --bg-0: #eff6ff;
+            --bg-1: #eef2ff;
+            --bg-2: #f5f3ff;
+            --foreground: #111827;
+            --muted-foreground: #6b7280;
+            --card: rgba(255, 255, 255, 0.72);
+            --border: rgba(255, 255, 255, 0.55);
+            --border-strong: rgba(17, 24, 39, 0.10);
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --primary-foreground: #ffffff;
+            --success: #22c55e;
+            --success-bg: rgba(34, 197, 94, 0.10);
+            --radius: 22px;
+            --shadow-lg: 0 24px 70px rgba(15, 23, 42, 0.18);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -13,59 +33,142 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            background: linear-gradient(135deg, var(--bg-0) 0%, var(--bg-1) 45%, var(--bg-2) 100%);
+            color: var(--foreground);
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 20px;
+            padding: 22px;
+        }
+
+        .page-shell {
+            width: 100%;
+            max-width: 1200px;
+            display: grid;
+            grid-template-columns: 280px minmax(0, 1fr) 280px;
+            gap: 24px;
+            align-items: center;
         }
 
         .container {
-            background: white;
-            border-radius: 20px;
-            padding: 40px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            max-width: 600px;
             width: 100%;
+            max-width: 900px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: calc(var(--radius) + 6px);
+            box-shadow: var(--shadow-lg);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            overflow: hidden;
+            padding: 34px;
+        }
+
+        .side-card {
+            /* 对齐 survey-assistant-ui：backdrop-blur-md bg-white/40 rounded-3xl p-6 border border-white/60 shadow-lg */
+            background: rgba(255, 255, 255, 0.40);
+            border: 1px solid rgba(255, 255, 255, 0.60);
+            border-radius: 24px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 18px 44px rgba(15, 23, 42, 0.10);
+            padding: 24px;
+        }
+
+        .side-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: rgba(17, 24, 39, 0.80);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 16px;
+        }
+
+        .side-list {
+            list-style: none;
+            padding-left: 0;
+            margin: 0;
+            display: grid;
+            gap: 16px;
+        }
+
+        .side-step {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .side-badge {
+            width: 28px;
+            height: 28px;
+            border-radius: 999px;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.20) 0%, rgba(99, 102, 241, 0.20) 100%);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background 0.2s ease;
+        }
+
+        .side-badge span {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .side-step-body {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .side-step-title {
+            font-size: 14px;
+            font-weight: 650;
+            color: rgba(17, 24, 39, 0.92);
+            margin: 0 0 2px 0;
+        }
+
+        .side-step-desc {
+            font-size: 12px;
+            color: rgba(107, 114, 128, 1);
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        .side-foot {
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.40);
+        }
+
+        .side-foot-text {
+            font-size: 12px;
+            color: rgba(107, 114, 128, 1);
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        .title-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 22px;
+        }
+
+        .title-icon {
+            width: 34px;
+            height: 34px;
+            color: rgba(17, 24, 39, 0.65);
         }
 
         h1 {
             text-align: center;
-            color: #333;
-            margin-bottom: 30px;
-            font-size: 28px;
-        }
-
-        .upload-area {
-            border: 3px dashed #667eea;
-            border-radius: 10px;
-            padding: 40px;
-            text-align: center;
-            margin-bottom: 20px;
-            cursor: pointer;
-            transition: all 0.3s;
-            background: #f8f9ff;
-        }
-
-        .upload-area:hover {
-            border-color: #764ba2;
-            background: #f0f2ff;
-        }
-
-        .upload-area.dragover {
-            border-color: #764ba2;
-            background: #e8ebff;
-        }
-
-        .upload-icon {
-            font-size: 48px;
-            margin-bottom: 10px;
-        }
-
-        .upload-text {
-            color: #666;
-            font-size: 16px;
+            color: var(--foreground);
+            font-size: 34px;
+            font-weight: 650;
+            letter-spacing: -0.02em;
+            margin-bottom: 0;
         }
 
         /* 只隐藏“音频上传”的文件输入框（LLM 匹配区的 txt 选择需要显示） */
@@ -73,8 +176,98 @@
             display: none;
         }
 
+        .status {
+            text-align: center;
+            padding: 12px 14px;
+            margin-bottom: 12px;
+            border-radius: 18px;
+            display: none;
+            border: 1px solid var(--border-strong);
+            background: rgba(255, 255, 255, 0.65);
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        }
+
+        .status.info {
+            color: #1d4ed8;
+            background: rgba(59, 130, 246, 0.10);
+            border-color: rgba(59, 130, 246, 0.20);
+        }
+
+        .status.success {
+            color: #166534;
+            background: var(--success-bg);
+            border-color: rgba(34, 197, 94, 0.25);
+        }
+
+        .status.error {
+            background: rgba(239, 68, 68, 0.10);
+            color: #b91c1c;
+            border: 2px solid rgba(239, 68, 68, 0.35);
+            font-weight: 600;
+            position: relative;
+        }
+
+        .status.error::after {
+            content: ' ✕ 点击关闭';
+            font-size: 12px;
+            opacity: 0.75;
+            margin-left: 10px;
+        }
+
+        .upload-area {
+            border: 2px dashed rgba(99, 102, 241, 0.35);
+            border-radius: 26px;
+            padding: 44px 22px;
+            text-align: center;
+            margin: 18px 0 18px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            background: rgba(99, 102, 241, 0.06);
+        }
+
+        .upload-area:hover {
+            border-color: rgba(79, 70, 229, 0.55);
+            background: rgba(99, 102, 241, 0.10);
+            transform: translateY(-1px);
+        }
+
+        .upload-area.dragover {
+            border-color: rgba(79, 70, 229, 0.75);
+            background: rgba(79, 70, 229, 0.12);
+        }
+
+        .upload-icon {
+            width: 74px;
+            height: 74px;
+            border-radius: 20px;
+            margin: 0 auto 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, rgba(219, 234, 254, 0.95) 0%, rgba(224, 231, 255, 0.95) 60%);
+            box-shadow: 0 12px 26px rgba(15, 23, 42, 0.10);
+        }
+
+        .upload-icon svg {
+            width: 34px;
+            height: 34px;
+            color: rgba(37, 99, 235, 0.95);
+        }
+
+        .upload-text {
+            color: var(--foreground);
+            font-size: 15px;
+            line-height: 1.4;
+        }
+
+        .upload-text.subtle {
+            color: var(--muted-foreground);
+            font-size: 12px;
+            margin-top: 6px;
+        }
+
         .audio-player {
-            margin: 20px 0;
+            margin: 18px 0 10px;
             display: none;
         }
 
@@ -83,21 +276,96 @@
             outline: none;
         }
 
-        .button-group {
+        .mode-row {
+            margin-bottom: 16px;
+            padding: 12px 14px;
+            background: rgba(99, 102, 241, 0.06);
+            border: 1px solid rgba(99, 102, 241, 0.16);
+            border-radius: 20px;
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .mode-label {
+            font-size: 13px;
+            color: var(--foreground);
+            font-weight: 650;
+        }
+
+        /* 参考 survey-assistant-ui：rounded-xl bg-secondary p-1 shadow-inner */
+        .segmented {
+            display: inline-flex;
+            gap: 6px;
+            align-items: center;
+            padding: 6px;
+            background: rgba(17, 24, 39, 0.06);
+            border-radius: 18px; /* 更“胶囊” */
+            box-shadow:
+                inset 0 2px 6px rgba(15, 23, 42, 0.10),
+                inset 0 1px 0 rgba(255, 255, 255, 0.75);
+        }
+
+        .segmented label {
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        .segmented input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .segmented span {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 11px 20px;
+            border-radius: 14px;
+            font-size: 15px;
+            font-weight: 700;
+            color: rgba(17, 24, 39, 0.68);
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+
+        .segmented label:hover span {
+            color: rgba(17, 24, 39, 0.92);
+        }
+
+        /* 选中态：更深、更实（接近你截图上图的风格），并带明显浮起阴影 */
+        .segmented input[type="radio"]:checked + span {
+            background: #0b63b6;
+            color: #ffffff;
+            box-shadow: 0 10px 22px rgba(11, 99, 182, 0.26);
+        }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin: 18px 0 14px;
+        }
+
+        .button-group-3 {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
         button {
-            flex: 1;
-            padding: 12px 24px;
+            height: 54px;
+            padding: 12px 18px;
             border: none;
-            border-radius: 8px;
-            font-size: 16px;
+            border-radius: 20px;
+            font-size: 15px;
             cursor: pointer;
-            transition: all 0.3s;
-            font-weight: 500;
+            transition: all 0.2s ease;
+            font-weight: 650;
+            letter-spacing: -0.01em;
         }
 
         .btn-loading {
@@ -107,101 +375,262 @@
         }
 
         .btn-primary {
-            background: #667eea;
-            color: white;
+            background: linear-gradient(180deg, rgba(96, 165, 250, 1) 0%, var(--primary) 100%);
+            color: var(--primary-foreground);
+            box-shadow: 0 12px 26px rgba(59, 130, 246, 0.28);
         }
 
         .btn-primary:hover {
-            background: #5568d3;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            background: linear-gradient(180deg, rgba(96, 165, 250, 1) 0%, var(--primary-hover) 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 16px 34px rgba(59, 130, 246, 0.32);
         }
 
         .btn-primary:disabled {
-            background: #ccc;
+            background: rgba(17, 24, 39, 0.18);
             cursor: not-allowed;
             transform: none;
+            box-shadow: none;
         }
 
         .btn-secondary {
-            background: #f0f0f0;
-            color: #333;
+            background: rgba(255, 255, 255, 0.55);
+            color: var(--foreground);
+            border: 1px solid rgba(17, 24, 39, 0.10);
         }
 
         .btn-secondary:hover {
-            background: #e0e0e0;
+            background: rgba(255, 255, 255, 0.80);
+            transform: translateY(-1px);
+        }
+
+        /* 转写结果区的三个动作按钮：更接近设计稿的“胶囊 + 细边框 + 轻阴影” */
+        .action-btn {
+            background: rgba(255, 255, 255, 0.82);
+            border: 1px solid rgba(17, 24, 39, 0.12);
+            box-shadow: 0 10px 22px rgba(15, 23, 42, 0.08);
+            font-weight: 700;
+        }
+
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 0.95);
+            border-color: rgba(59, 130, 246, 0.22);
+            box-shadow: 0 14px 28px rgba(15, 23, 42, 0.10);
+        }
+
+        .action-btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
         }
 
         .result-area {
-            margin-top: 20px;
+            margin-top: 18px;
             display: none;
         }
 
         .result-label {
-            font-weight: 600;
-            color: #333;
+            font-weight: 750;
+            color: var(--foreground);
             margin-bottom: 10px;
-            font-size: 16px;
+            font-size: 18px;
+        }
+
+        .label-with-icon {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .label-icon {
+            width: 22px;
+            height: 22px;
+            color: rgba(17, 24, 39, 0.65);
         }
 
         .result-text {
-            background: #f8f9ff;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 15px;
+            background: rgba(255, 255, 255, 0.60);
+            border: 1px solid rgba(17, 24, 39, 0.10);
+            border-radius: 18px;
+            padding: 16px 18px;
             min-height: 100px;
             max-height: 300px;
             overflow-y: auto;
-            color: #333;
-            line-height: 1.6;
+            color: var(--foreground);
+            line-height: 1.75;
             white-space: pre-wrap;
             word-wrap: break-word;
         }
 
-        .status {
-            text-align: center;
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 5px;
-            display: none;
+        .section-divider {
+            margin: 26px 0;
+            border: none;
+            border-top: 1px solid rgba(17, 24, 39, 0.10);
         }
 
-        .status.info {
-            background: #e3f2fd;
-            color: #1976d2;
+        .two-inputs {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 12px;
         }
 
-        .status.error {
-            background: #ffebee;
-            color: #c62828;
-            border: 2px solid #c62828;
-            font-weight: 500;
-            position: relative;
+        .file-input {
+            padding: 12px 14px;
+            border: 1px solid rgba(17, 24, 39, 0.12);
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.60);
         }
-        
-        .status.error::after {
-            content: ' ✕ 点击关闭';
+
+        /* LLM 匹配区：卡片式文件选择器（保留原 input id，JS 仍读取 input.files） */
+        .file-select input[type="file"] {
+            position: absolute;
+            opacity: 0;
+            width: 1px;
+            height: 1px;
+            pointer-events: none;
+        }
+
+        .file-select-label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.60);
+            border: 1px solid rgba(17, 24, 39, 0.10);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .file-select-label:hover {
+            background: rgba(255, 255, 255, 0.80);
+            transform: translateY(-1px);
+        }
+
+        .file-select-title {
             font-size: 12px;
-            opacity: 0.7;
-            margin-left: 10px;
+            font-weight: 650;
+            color: rgba(17, 24, 39, 0.55);
+            margin-bottom: 2px;
         }
 
-        .status.success {
-            background: #e8f5e9;
-            color: #2e7d32;
+        .file-select-name {
+            font-size: 14px;
+            font-weight: 650;
+            color: rgba(17, 24, 39, 0.85);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 320px;
+        }
+
+        .file-select-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            background: rgba(17, 24, 39, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .file-select-icon svg {
+            width: 20px;
+            height: 20px;
+            color: rgba(107, 114, 128, 1);
+        }
+
+        @media (max-width: 720px) {
+            .container { padding: 22px; }
+            h1 { font-size: 28px; }
+            .button-group { grid-template-columns: 1fr; }
+            .button-group-3 { grid-template-columns: 1fr; }
+            .two-inputs { grid-template-columns: 1fr; }
+            button { height: 52px; }
+        }
+
+        @media (max-width: 1100px) {
+            .page-shell {
+                grid-template-columns: 1fr;
+                max-width: 920px;
+            }
+            .side-card {
+                display: none;
+            }
+            .container {
+                max-width: 920px;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎤 问卷调查小助手</h1>
+    <div class="page-shell">
+        <aside class="side-card" aria-label="使用指南">
+            <div class="side-title">1.音频转文本</div>
+            <ul class="side-list">
+                <li class="side-step">
+                    <div class="side-badge"><span>1</span></div>
+                    <div class="side-step-body">
+                        <p class="side-step-title">上传音频</p>
+                        <p class="side-step-desc">点击或拖拽音频文件</p>
+                    </div>
+                </li>
+                <li class="side-step">
+                    <div class="side-badge"><span>2</span></div>
+                    <div class="side-step-body">
+                        <p class="side-step-title">选择模式</p>
+                        <p class="side-step-desc">本地转写或在线转写</p>
+                    </div>
+                </li>
+                <li class="side-step">
+                    <div class="side-badge"><span>3</span></div>
+                    <div class="side-step-body">
+                        <p class="side-step-title">开始转文字</p>
+                        <p class="side-step-desc">等待完成后查看结果</p>
+                    </div>
+                </li>
+                <li class="side-step">
+                    <div class="side-badge"><span>4</span></div>
+                    <div class="side-step-body">
+                        <p class="side-step-title">格式化文本</p>
+                        <p class="side-step-desc">自动整理为采访对话</p>
+                    </div>
+                </li>
+                <li class="side-step">
+                    <div class="side-badge"><span>5</span></div>
+                    <div class="side-step-body">
+                        <p class="side-step-title">下载结果</p>
+                        <p class="side-step-desc">导出生成的文本</p>
+                    </div>
+                </li>
+            </ul>
+        </aside>
+
+        <div class="container">
+        <div class="title-row">
+            <svg class="title-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12.5 6.5l5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0 0-3L16.5 4.5a2.1 2.1 0 0 0-3 0L3 15v5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            </svg>
+            <h1>问卷调查AI小助手</h1>
+        </div>
         
         <div id="status" class="status"></div>
 
         <div class="upload-area" id="uploadArea">
-            <div class="upload-icon">📁</div>
+            <div class="upload-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                    <path d="M12 3v10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M8 7l4-4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </div>
             <div class="upload-text">点击或拖拽音频文件到这里</div>
-            <div class="upload-text" style="font-size: 12px; margin-top: 5px;">支持 MP3, WAV, OGG 等格式</div>
+            <div class="upload-text subtle">支持 MP3, WAV, OGG 等格式</div>
         </div>
         <input type="file" id="fileInput" accept="audio/*">
 
@@ -209,15 +638,15 @@
             <audio id="audioElement" controls></audio>
         </div>
 
-        <div style="margin-bottom: 15px; padding: 12px; background: #f8f9ff; border-radius: 8px; display: flex; align-items: center; justify-content: space-between;">
-            <label style="font-size: 14px; color: #666; font-weight: 500;">转写模式：</label>
-            <div style="display: flex; gap: 10px; align-items: center;">
-                <label style="display: flex; align-items: center; cursor: pointer; font-size: 14px;">
-                    <input type="radio" name="transcribeMode" value="local" checked style="margin-right: 6px; cursor: pointer;">
+        <div class="mode-row">
+            <div class="mode-label">转写模式：</div>
+            <div class="segmented">
+                <label>
+                    <input type="radio" name="transcribeMode" value="local" checked>
                     <span>本地转写</span>
                 </label>
-                <label style="display: flex; align-items: center; cursor: pointer; font-size: 14px;">
-                    <input type="radio" name="transcribeMode" value="api" style="margin-right: 6px; cursor: pointer;">
+                <label>
+                    <input type="radio" name="transcribeMode" value="api">
                     <span>在线转写</span>
                 </label>
             </div>
@@ -237,23 +666,61 @@
         <div class="result-area" id="resultArea">
             <div class="result-label">转换结果：</div>
             <div class="result-text" id="resultText"></div>
-            <div class="button-group" style="margin-top: 10px;">
-                <button class="btn-secondary" id="formatTranscriptBtn" disabled>格式化文本</button>
-                <button class="btn-secondary" id="copyTranscriptBtn" disabled>复制文本</button>
-                <button class="btn-secondary" id="downloadTranscriptBtn" disabled>导出 .txt</button>
+            <div class="button-group button-group-3" style="margin-top: 10px;">
+                <button class="btn-secondary action-btn" id="formatTranscriptBtn" disabled>格式化文本</button>
+                <button class="btn-secondary action-btn" id="copyTranscriptBtn" disabled>复制文本</button>
+                <button class="btn-secondary action-btn" id="downloadTranscriptBtn" disabled>下载结果</button>
             </div>
         </div>
 
-        <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
+        <hr class="section-divider" />
 
-        <div class="result-label">AI智能分析匹配</div>
-        <div class="upload-text" style="font-size: 12px; margin: 6px 0 12px; color:#666;">
-            选择 <b>语音转成的文本文件</b>和 <b>问题模版文件</b>，点击开始匹配。
+        <div class="result-label">
+            <span class="label-with-icon">
+                <svg class="label-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 2l1.2 3.6a2 2 0 0 0 1.26 1.26L18 8l-3.54 1.14a2 2 0 0 0-1.26 1.26L12 14l-1.2-3.6a2 2 0 0 0-1.26-1.26L6 8l3.54-1.14A2 2 0 0 0 10.8 5.6L12 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                    <path d="M18.5 12.5l.7 2.1a1.2 1.2 0 0 0 .76.76l2.04.64-2.04.64a1.2 1.2 0 0 0-.76.76l-.7 2.1-.7-2.1a1.2 1.2 0 0 0-.76-.76L15.3 16l2.04-.64a1.2 1.2 0 0 0 .76-.76l.4-1.1z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                </svg>
+                <span>AI智能匹配</span>
+            </span>
+        </div>
+        <div class="upload-text" style="font-size: 13px; margin: 6px 0 12px; color:#666;">
+            <b>选择结果文件</b>和 <b>问题模版文件</b>，点击开始匹配。
         </div>
 
-        <div style="display:flex; gap:10px; margin-bottom:10px;">
-            <input id="transcriptTxtInput" type="file" accept=".txt" style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px;">
-            <input id="questionsTxtInput" type="file" accept=".txt" style="flex:1; padding:10px; border:1px solid #ddd; border-radius:8px;">
+        <div class="two-inputs">
+            <div class="file-select">
+                <input id="transcriptTxtInput" type="file" accept=".txt">
+                <label class="file-select-label" for="transcriptTxtInput">
+                    <div style="min-width:0;">
+                        <div class="file-select-title">选择文件</div>
+                        <div class="file-select-name" id="transcriptTxtName">未选择文件</div>
+                    </div>
+                    <div class="file-select-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M12 3v10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M8 7l4-4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                </label>
+            </div>
+            <div class="file-select">
+                <input id="questionsTxtInput" type="file" accept=".txt">
+                <label class="file-select-label" for="questionsTxtInput">
+                    <div style="min-width:0;">
+                        <div class="file-select-title">选择文件</div>
+                        <div class="file-select-name" id="questionsTxtName">未选择文件</div>
+                    </div>
+                    <div class="file-select-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M12 3v10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M8 7l4-4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                </label>
+            </div>
         </div>
 
         <div class="button-group">
@@ -265,6 +732,44 @@
             <div class="result-label">匹配结果：</div>
             <div class="result-text" id="matchText"></div>
         </div>
+        </div>
+
+        <aside class="side-card" aria-label="AI 匹配指南">
+            <div class="side-title">2.问题智能匹配</div>
+            <ul class="side-list">
+                <li class="side-step">
+                    <div class="side-badge"><span>1</span></div>
+                    <div class="side-step-body">
+                        <p class="side-step-title">选择结果文件</p>
+                        <p class="side-step-desc">转写格式化后的 .txt</p>
+                    </div>
+                </li>
+                <li class="side-step">
+                    <div class="side-badge"><span>2</span></div>
+                    <div class="side-step-body">
+                        <p class="side-step-title">选择问题模板</p>
+                        <p class="side-step-desc">问卷模板文件</p>
+                    </div>
+                </li>
+                <li class="side-step">
+                    <div class="side-badge"><span>3</span></div>
+                    <div class="side-step-body">
+                        <p class="side-step-title">开始匹配</p>
+                        <p class="side-step-desc">等待模型输出完成</p>
+                    </div>
+                </li>
+                <li class="side-step">
+                    <div class="side-badge"><span>4</span></div>
+                    <div class="side-step-body">
+                        <p class="side-step-title">下载结果</p>
+                        <p class="side-step-desc">保存匹配后的文本</p>
+                    </div>
+                </li>
+            </ul>
+            <div class="side-foot">
+                <p class="side-foot-text"></p>
+            </div>
+        </aside>
     </div>
 
     <script>
@@ -284,6 +789,8 @@
         const status = document.getElementById('status');
         const transcriptTxtInput = document.getElementById('transcriptTxtInput');
         const questionsTxtInput = document.getElementById('questionsTxtInput');
+        const transcriptTxtName = document.getElementById('transcriptTxtName');
+        const questionsTxtName = document.getElementById('questionsTxtName');
         const runMatchBtn = document.getElementById('runMatchBtn');
         const downloadMatchBtn = document.getElementById('downloadMatchBtn');
         const matchArea = document.getElementById('matchArea');
@@ -498,16 +1005,18 @@
                             showStatus(jd.message, 'info');
                         }
 
+                        // 不展示底层 whisper/ffmpeg 日志（用户看不懂，且会污染“转换结果”区域）
+                        // 如需排查问题，可在后端日志或 /api/jobs/<job_id> 查看 log_tail
                         if (Array.isArray(jd.log_tail) && jd.log_tail.length > 0) {
-                            // 将日志尾部展示在结果区域（不影响最终文本）
                             const logText = jd.log_tail.join('\n');
                             if (logText !== lastLog) {
                                 lastLog = logText;
-                                // 如果转写文本尚为空，则先显示日志；完成后会被结果覆盖
-                                if (!resultText.textContent) {
-                                    resultText.textContent = logText;
-                                }
                             }
+                        }
+
+                        // 转写进行中：结果区域展示简洁提示，避免刷屏
+                        if ((jd.status === 'queued' || jd.status === 'running') && !getTranscriptText()) {
+                            resultText.textContent = '转写处理中…请耐心等待（完成后会自动显示文本）';
                         }
 
                         if (jd.status === 'done') {
@@ -694,6 +1203,23 @@
 
         // 页面加载：检测后端
         checkBackend();
+
+        // 仅用于展示文件名（不影响原有逻辑：仍以 input.files 为准）
+        function updateFileNameLabel(inputEl, nameEl) {
+            try {
+                if (!inputEl || !nameEl) return;
+                const f = inputEl.files && inputEl.files[0] ? inputEl.files[0] : null;
+                nameEl.textContent = f ? f.name : '未选择文件';
+            } catch (e) {}
+        }
+        if (transcriptTxtInput) {
+            transcriptTxtInput.addEventListener('change', () => updateFileNameLabel(transcriptTxtInput, transcriptTxtName));
+            updateFileNameLabel(transcriptTxtInput, transcriptTxtName);
+        }
+        if (questionsTxtInput) {
+            questionsTxtInput.addEventListener('change', () => updateFileNameLabel(questionsTxtInput, questionsTxtName));
+            updateFileNameLabel(questionsTxtInput, questionsTxtName);
+        }
 
         async function readFileAsText(file) {
             return await new Promise((resolve, reject) => {
