@@ -41,7 +41,6 @@
             align-items: center;
             padding: 22px;
         }
-
         .page-shell {
             width: 100%;
             max-width: 1200px;
@@ -153,7 +152,21 @@
             align-items: center;
             justify-content: center;
             gap: 12px;
-            margin-bottom: 22px;
+            margin-bottom: 42px;
+        }
+
+        /* 顶部标题与第一步之间：很淡的分割线（用于轻微区分区域，不破坏整体简洁） */
+        .header-divider{
+            margin: 18px 0 26px;
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg,
+              rgba(59,130,246,0) 0%,
+              rgba(17,24,39,0.05) 18%,
+              rgba(17,24,39,0.08) 50%,
+              rgba(17,24,39,0.05) 82%,
+              rgba(59,130,246,0) 100%
+            );
         }
 
         .title-icon {
@@ -294,24 +307,21 @@
             font-weight: 650;
         }
 
-        /* 参考 survey-assistant-ui：rounded-xl bg-secondary p-1 shadow-inner */
         .segmented {
             display: inline-flex;
             gap: 6px;
             align-items: center;
             padding: 6px;
-            background: rgba(17, 24, 39, 0.06);
-            border-radius: 18px; /* 更“胶囊” */
-            box-shadow:
-                inset 0 2px 6px rgba(15, 23, 42, 0.10),
-                inset 0 1px 0 rgba(255, 255, 255, 0.75);
+            background: rgba(17, 24, 39, 0.05);
+            border-radius: 16px;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
         }
 
         .segmented label {
             display: inline-flex;
             align-items: center;
             cursor: pointer;
-            border-radius: 14px;
+            border-radius: 12px;
             overflow: hidden;
         }
 
@@ -325,11 +335,11 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            padding: 11px 20px;
-            border-radius: 14px;
-            font-size: 15px;
-            font-weight: 700;
-            color: rgba(17, 24, 39, 0.68);
+            padding: 10px 16px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 650;
+            color: rgba(17, 24, 39, 0.72);
             transition: all 0.2s ease;
             user-select: none;
         }
@@ -338,11 +348,10 @@
             color: rgba(17, 24, 39, 0.92);
         }
 
-        /* 选中态：更深、更实（接近你截图上图的风格），并带明显浮起阴影 */
         .segmented input[type="radio"]:checked + span {
-            background: #0b63b6;
-            color: #ffffff;
-            box-shadow: 0 10px 22px rgba(11, 99, 182, 0.26);
+            background: linear-gradient(180deg, rgba(96, 165, 250, 1) 0%, var(--primary) 100%);
+            color: var(--primary-foreground);
+            box-shadow: 0 10px 22px rgba(59, 130, 246, 0.26);
         }
 
         .button-group {
@@ -437,16 +446,24 @@
             font-size: 18px;
         }
 
-        .label-with-icon {
+        /* 功能分区标题：图标 + 标题 + 一行说明（与 AI 匹配区保持一致风格） */
+        .section-title {
             display: inline-flex;
             align-items: center;
             gap: 10px;
         }
 
-        .label-icon {
+        .section-icon {
             width: 22px;
             height: 22px;
             color: rgba(17, 24, 39, 0.65);
+        }
+
+        .section-subtitle {
+            font-size: 13px;
+            margin: 12px 0 16px;
+            color: #666;
+            line-height: 1.6;
         }
 
         .result-text {
@@ -466,7 +483,16 @@
         .section-divider {
             margin: 26px 0;
             border: none;
-            border-top: 1px solid rgba(17, 24, 39, 0.10);
+            height: 1px;
+            /* 更清晰但不突兀：中间略亮、两侧淡出的渐变分割线 */
+            background: linear-gradient(
+                90deg,
+                rgba(59, 130, 246, 0) 0%,
+                rgba(59, 130, 246, 0.22) 18%,
+                rgba(59, 130, 246, 0.38) 50%,
+                rgba(59, 130, 246, 0.22) 82%,
+                rgba(59, 130, 246, 0) 100%
+            );
         }
 
         .two-inputs {
@@ -618,8 +644,23 @@
             </svg>
             <h1>问卷调查AI小助手</h1>
         </div>
+
+        <hr class="header-divider" />
         
         <div id="status" class="status"></div>
+
+        <div class="result-label">
+            <span class="section-title">
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M19 11a7 7 0 0 1-14 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M12 18v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <path d="M8 21h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <span>第一步：语音转文字</span>
+            </span>
+        </div>
+        <div class="section-subtitle">上传音频并转写为文本；完成后可格式化为对话并下载结果。</div>
 
         <div class="upload-area" id="uploadArea">
             <div class="upload-icon" aria-hidden="true">
@@ -676,16 +717,16 @@
         <hr class="section-divider" />
 
         <div class="result-label">
-            <span class="label-with-icon">
-                <svg class="label-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <span class="section-title">
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M12 2l1.2 3.6a2 2 0 0 0 1.26 1.26L18 8l-3.54 1.14a2 2 0 0 0-1.26 1.26L12 14l-1.2-3.6a2 2 0 0 0-1.26-1.26L6 8l3.54-1.14A2 2 0 0 0 10.8 5.6L12 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
                     <path d="M18.5 12.5l.7 2.1a1.2 1.2 0 0 0 .76.76l2.04.64-2.04.64a1.2 1.2 0 0 0-.76.76l-.7 2.1-.7-2.1a1.2 1.2 0 0 0-.76-.76L15.3 16l2.04-.64a1.2 1.2 0 0 0 .76-.76l.4-1.1z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
                 </svg>
-                <span>AI智能匹配</span>
+                <span>第二步：AI智能匹配</span>
             </span>
         </div>
-        <div class="upload-text" style="font-size: 13px; margin: 6px 0 12px; color:#666;">
-            <b>选择结果文件</b>和 <b>问题模版文件</b>，点击开始匹配。
+        <div class="section-subtitle">
+            <b>选择结果文件</b>和<b>问题模版文件</b>，点击开始匹配。
         </div>
 
         <div class="two-inputs">
@@ -1005,18 +1046,16 @@
                             showStatus(jd.message, 'info');
                         }
 
-                        // 不展示底层 whisper/ffmpeg 日志（用户看不懂，且会污染“转换结果”区域）
-                        // 如需排查问题，可在后端日志或 /api/jobs/<job_id> 查看 log_tail
                         if (Array.isArray(jd.log_tail) && jd.log_tail.length > 0) {
+                            // 将日志尾部展示在结果区域（不影响最终文本）
                             const logText = jd.log_tail.join('\n');
                             if (logText !== lastLog) {
                                 lastLog = logText;
+                                // 如果转写文本尚为空，则先显示日志；完成后会被结果覆盖
+                                if (!resultText.textContent) {
+                                    resultText.textContent = logText;
+                                }
                             }
-                        }
-
-                        // 转写进行中：结果区域展示简洁提示，避免刷屏
-                        if ((jd.status === 'queued' || jd.status === 'running') && !getTranscriptText()) {
-                            resultText.textContent = '转写处理中…请耐心等待（完成后会自动显示文本）';
                         }
 
                         if (jd.status === 'done') {
