@@ -408,7 +408,11 @@ def _xunfei_transcribe_new_api(audio_path: Path, job_id: str, appid: str, api_ke
     api_get_result = '/v2/getResult'  # 正确的结果查询接口路径
     
     try:
-        from datetime import datetime
+        from datetime import datetime, timedelta, timezone
+        try:
+            from zoneinfo import ZoneInfo  # py>=3.9
+        except Exception:
+            ZoneInfo = None
         import random
         import string
         
@@ -417,20 +421,17 @@ def _xunfei_transcribe_new_api(audio_path: Path, job_id: str, appid: str, api_ke
         file_len = audio_path.stat().st_size
         file_name = audio_path.name
         
-        # dateTime: 请求发起的本地时间，格式为 yyyy-MM-dd'T'HH:mm:ssZ
-        # 根据错误信息，格式应该是 yyyy-MM-dd'T'HH:mm:ssZ，其中 Z 是时区偏移（如 +0800）
-        now = datetime.now()
-        timezone_offset = now.strftime('%z')
-        if not timezone_offset:
-            timezone_offset = '+0800'  # 默认东八区
-        # 确保格式为 ±HHmm（例如 +0800）
-        if len(timezone_offset) == 5:
-            # 已经是 ±HHmm 格式
-            pass
-        elif len(timezone_offset) == 6:
-            # 可能是 ±HH:MM 格式，需要去掉冒号
-            timezone_offset = timezone_offset[:3] + timezone_offset[4:]
-        date_time = now.strftime(f"%Y-%m-%dT%H:%M:%S{timezone_offset}")
+        # dateTime: 请求发起的本地时间，格式为 yyyy-MM-dd'T'HH:mm:ssZ（Z 为时区偏移，如 +0800）
+        #
+        # 线上（OCI）常见坑：服务器系统时区是 UTC，讯飞接口对 dateTime/时区校验很敏感，
+        # 可能返回 signature timeout（code=100008）。
+        # 为避免“本地可用但远端不可用”，这里统一用北京时间（+0800）生成 dateTime。
+        if ZoneInfo:
+            now = datetime.now(ZoneInfo("Asia/Shanghai"))
+        else:
+            tz = timezone(timedelta(hours=8))
+            now = datetime.now(tz)
+        date_time = now.strftime("%Y-%m-%dT%H:%M:%S%z")
         
         # signatureRandom: 16位随机字符串
         signature_random = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
@@ -547,16 +548,12 @@ def _xunfei_transcribe_new_api(audio_path: Path, job_id: str, appid: str, api_ke
             _set_job(job_id, message=f"查询转写结果… ({poll_count}/{max_polls})", progress=50 + min(40, poll_count * 40 // max_polls))
             
             # 每次查询都需要新的参数和签名
-            now = datetime.now()
-            timezone_offset = now.strftime('%z') or '+0800'
-            # 确保格式为 ±HHmm（例如 +0800）
-            if len(timezone_offset) == 5:
-                # 已经是 ±HHmm 格式
-                pass
-            elif len(timezone_offset) == 6:
-                # 可能是 ±HH:MM 格式，需要去掉冒号
-                timezone_offset = timezone_offset[:3] + timezone_offset[4:]
-            date_time = now.strftime(f"%Y-%m-%dT%H:%M:%S{timezone_offset}")
+            if ZoneInfo:
+                now = datetime.now(ZoneInfo("Asia/Shanghai"))
+            else:
+                tz = timezone(timedelta(hours=8))
+                now = datetime.now(tz)
+            date_time = now.strftime("%Y-%m-%dT%H:%M:%S%z")
             signature_random = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
             
             query_params = {
