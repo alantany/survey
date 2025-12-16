@@ -1304,6 +1304,29 @@ def _build_qa_prompt(transcript: str, questions_text: str) -> str:
 现在开始输出最终结果（只输出结果正文）："""
 
 
+def _build_format_prompt(transcript: str) -> str:
+    """
+    构造格式化提示词：把未标注说话人的转写文本整理为“采访者/受访者”交替的对话格式。
+    约束：一行一句，固定标签“采访者：”“受访者：”，不加时间戳、不加解释、不加 Markdown/代码块。
+    """
+    return f"""你是采访转写整理助手，输入是一段没有标注说话人的采访转写文本。请根据语义和语气判断说话角色，并输出整洁的对话稿。
+
+必须遵守：
+- 只使用两种角色标签：采访者： / 受访者：
+- 一行一句，按时间顺序排列
+- 不要添加时间戳、序号、额外解释或 Markdown/代码块
+- 原意保持简洁清晰，可适当断句让阅读更顺畅
+
+示例输出（示意）：
+采访者：请简单介绍一下自己。
+受访者：我是一名教师，主要教小学数学。
+
+现在请整理下面的文本，直接输出整理后的对话正文：
+{transcript}
+
+只输出整理后的对话，不要额外说明。"""
+
+
 def _openrouter_chat(api_key: str, model: str, prompt: str, max_tokens: int) -> dict:
     """
     OpenRouter（OpenAI 兼容）接口：
@@ -1452,6 +1475,61 @@ def llm_match():
             "match_duration": match_duration,
         }
     )
+
+
+@app.post("/api/llm/format")
+def llm_format():
+    """
+    使用 OpenRouter / DeepSeek 等大模型，将转写文本格式化为“采访者/受访者”逐行对话。
+    """
+    body = request.get_json(silent=True) or {}
+    transcript = (body.get("transcript") or "").strip()
+
+    if not transcript:
+        return jsonify({"error": "缺少 transcript（转写文本）"}), 400
+
+    cfg = _load_local_config()
+    api_key = cfg.get("openrouter_api_key", "")
+    model = cfg.get("openrouter_model", "tngtech/deepseek-r1t2-chimera:free")
+    max_tokens = int(cfg.get("openrouter_max_tokens", 8192))
+
+    if not api_key:
+        return jsonify({"error": "未配置 OpenRouter API Key：请在项目根目录创建 config.json（参考 config.example.json）"}), 400
+
+    prompt = _build_format_prompt(transcript=transcript)
+    format_start_time = time.time()
+    try:
+        resp = _openrouter_chat(api_key=api_key, model=model, prompt=prompt, max_tokens=max_tokens)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    format_end_time = time.time()
+
+    content = ""
+    finish_reason = ""
+    usage = {}
+    try:
+        content = resp["choices"][0]["message"]["content"]
+        finish_reason = resp["choices"][0].get("finish_reason", "")
+    except Exception:
+        content = ""
+
+    cleaned = _strip_code_fence(content)
+    try:
+        usage = resp.get("usage") or {}
+    except Exception:
+        usage = {}
+
+    return jsonify(
+        {
+            "model": model,
+            "max_tokens": max_tokens,
+            "finish_reason": finish_reason,
+            "usage": usage,
+            "formatted": cleaned,
+            "format_duration": format_end_time - format_start_time,
+        }
+    )
+
 
 @app.get("/api/health")
 def health():

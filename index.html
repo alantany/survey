@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>语音转文字工具</title>
+    <title>问卷调查小助手</title>
     <style>
         * {
             margin: 0;
@@ -194,7 +194,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>🎤 语音转文字工具</h1>
+        <h1>🎤 问卷调查小助手</h1>
         
         <div id="status" class="status"></div>
 
@@ -214,11 +214,11 @@
             <div style="display: flex; gap: 10px; align-items: center;">
                 <label style="display: flex; align-items: center; cursor: pointer; font-size: 14px;">
                     <input type="radio" name="transcribeMode" value="local" checked style="margin-right: 6px; cursor: pointer;">
-                    <span>本地（Whisper）</span>
+                    <span>本地转写</span>
                 </label>
                 <label style="display: flex; align-items: center; cursor: pointer; font-size: 14px;">
                     <input type="radio" name="transcribeMode" value="api" style="margin-right: 6px; cursor: pointer;">
-                    <span>API</span>
+                    <span>在线转写</span>
                 </label>
             </div>
         </div>
@@ -238,6 +238,7 @@
             <div class="result-label">转换结果：</div>
             <div class="result-text" id="resultText"></div>
             <div class="button-group" style="margin-top: 10px;">
+                <button class="btn-secondary" id="formatTranscriptBtn" disabled>格式化文本</button>
                 <button class="btn-secondary" id="copyTranscriptBtn" disabled>复制文本</button>
                 <button class="btn-secondary" id="downloadTranscriptBtn" disabled>导出 .txt</button>
             </div>
@@ -245,10 +246,9 @@
 
         <hr style="margin: 24px 0; border: none; border-top: 1px solid #eee;" />
 
-        <div class="result-label">LLM 匹配（OpenRouter / DeepSeek）</div>
+        <div class="result-label">AI智能分析匹配</div>
         <div class="upload-text" style="font-size: 12px; margin: 6px 0 12px; color:#666;">
-            选择 <b>录音.txt</b>（转写）和 <b>questions.txt</b>（问题模板），点击开始匹配。
-            <br/>说明：API Key/模型已保存在本地 <code>config.json</code>（不会提交到 GitHub）。
+            选择 <b>语音转成的文本文件</b>和 <b>问题模版文件</b>，点击开始匹配。
         </div>
 
         <div style="display:flex; gap:10px; margin-bottom:10px;">
@@ -278,6 +278,7 @@
         const docxInput = document.getElementById('docxInput');
         const resultArea = document.getElementById('resultArea');
         const resultText = document.getElementById('resultText');
+        const formatTranscriptBtn = document.getElementById('formatTranscriptBtn');
         const copyTranscriptBtn = document.getElementById('copyTranscriptBtn');
         const downloadTranscriptBtn = document.getElementById('downloadTranscriptBtn');
         const status = document.getElementById('status');
@@ -302,6 +303,7 @@
         }
 
         function setTranscriptActionsEnabled(enabled) {
+            formatTranscriptBtn.disabled = !enabled;
             copyTranscriptBtn.disabled = !enabled;
             downloadTranscriptBtn.disabled = !enabled;
         }
@@ -638,6 +640,58 @@
             showStatus('已导出转写 .txt', 'success');
         });
 
+        formatTranscriptBtn.addEventListener('click', async () => {
+            if (!backendReady) {
+                showStatus('本地服务未就绪：请先运行 python backend/app.py', 'error');
+                return;
+            }
+            const text = getTranscriptText();
+            if (!text) {
+                showStatus('没有可格式化的文本（请先完成转写）', 'error');
+                return;
+            }
+            try {
+                setFormatLoading(true);
+                showStatus('正在调用大模型格式化对话…', 'info');
+                const resp = await fetch('/api/llm/format', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ transcript: text })
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) {
+                    throw new Error(data && data.error ? data.error : '调用失败');
+                }
+                const formatted = (data.formatted || '').trim();
+                if (!formatted) {
+                    throw new Error('格式化结果为空');
+                }
+                resultText.textContent = formatted;
+                resultArea.style.display = 'block';
+                setTranscriptActionsEnabled(true);
+                let msg = '格式化完成';
+                const fd = data.format_duration;
+                if (fd !== undefined && fd !== null) {
+                    const seconds = Math.round(fd);
+                    const minutes = Math.floor(seconds / 60);
+                    const secs = seconds % 60;
+                    if (minutes > 0) {
+                        msg += `（耗时：${minutes}分${secs}秒）`;
+                    } else {
+                        msg += `（耗时：${seconds}秒）`;
+                    }
+                }
+                if (data.finish_reason) {
+                    msg += `，finish_reason=${data.finish_reason}`;
+                }
+                showStatus(msg, 'success');
+            } catch (e) {
+                showStatus('格式化失败：' + (e && e.message ? e.message : 'unknown'), 'error');
+            } finally {
+                setFormatLoading(false);
+            }
+        });
+
         // 页面加载：检测后端
         checkBackend();
 
@@ -648,6 +702,23 @@
                 reader.onerror = reject;
                 reader.readAsText(file, 'utf-8');
             });
+        }
+
+        function setFormatLoading(isLoading) {
+            if (isLoading) {
+                formatTranscriptBtn.disabled = true;
+                formatTranscriptBtn.classList.add('btn-loading');
+                formatTranscriptBtn.textContent = '格式化中...';
+                copyTranscriptBtn.disabled = true;
+                downloadTranscriptBtn.disabled = true;
+            } else {
+                formatTranscriptBtn.disabled = !getTranscriptText();
+                formatTranscriptBtn.classList.remove('btn-loading');
+                formatTranscriptBtn.textContent = '格式化文本';
+                const enabled = !!getTranscriptText();
+                copyTranscriptBtn.disabled = !enabled;
+                downloadTranscriptBtn.disabled = !enabled;
+            }
         }
 
         function setMatchLoading(isLoading) {
