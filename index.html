@@ -1046,16 +1046,18 @@
                             showStatus(jd.message, 'info');
                         }
 
+                        // 不展示底层 whisper/ffmpeg 日志（用户看不懂，且会污染“转换结果”区域）
+                        // 如需排查问题，可在后端日志或 /api/jobs/<job_id> 查看 log_tail
                         if (Array.isArray(jd.log_tail) && jd.log_tail.length > 0) {
-                            // 将日志尾部展示在结果区域（不影响最终文本）
                             const logText = jd.log_tail.join('\n');
                             if (logText !== lastLog) {
                                 lastLog = logText;
-                                // 如果转写文本尚为空，则先显示日志；完成后会被结果覆盖
-                                if (!resultText.textContent) {
-                                    resultText.textContent = logText;
-                                }
                             }
+                        }
+
+                        // 转写进行中：结果区域展示简洁提示，避免刷屏
+                        if ((jd.status === 'queued' || jd.status === 'running') && !getTranscriptText()) {
+                            resultText.textContent = '转写处理中…请耐心等待（完成后会自动显示文本）';
                         }
 
                         if (jd.status === 'done') {

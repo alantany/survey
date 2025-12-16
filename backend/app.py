@@ -15,7 +15,7 @@ import hmac
 from pathlib import Path
 from typing import Optional
 
-from flask import Flask, jsonify, request, send_from_directory, send_file
+from flask import Flask, jsonify, request, send_from_directory, send_file, make_response
 from docx import Document
 
 try:
@@ -1102,7 +1102,9 @@ def _worker(job_id: str, src_path: Path, mode: str = "local"):
 
 @app.get("/")
 def index():
-    return send_from_directory(str(ROOT_DIR), "index.html")
+    resp = make_response(send_from_directory(str(ROOT_DIR), "index.html"))
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.get("/README.md")
