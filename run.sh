@@ -1,94 +1,84 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
-# 通用启动脚本（本地/远程通用）
-# - 不使用绝对路径
-# - 默认仅本机访问：HOST=127.0.0.1
-# - 远程需要外网访问：HOST=0.0.0.0
+set -eu
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
-APP_CMD="backend/app.py"
-PID_FILE=".run.pid"
-LOG_FILE="server.log"
-
-HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8000}"
+HOST="${HOST:-127.0.0.1}"
 DEBUG="${DEBUG:-0}"
 
-function _is_running() {
-  if [[ -f "$PID_FILE" ]]; then
-    local pid
-    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
-    if [[ -n "${pid:-}" ]] && kill -0 "$pid" 2>/dev/null; then
-      return 0
-    fi
-  fi
-  return 1
-}
-
-function status() {
-  if _is_running; then
-    echo "running: pid=$(cat "$PID_FILE")  http://${HOST}:${PORT}"
-  else
-    echo "not running"
-  fi
-}
-
 function stop() {
-  if _is_running; then
-    local pid
-    pid="$(cat "$PID_FILE")"
-    echo "stopping pid=$pid ..."
-    kill "$pid" 2>/dev/null || true
-    sleep 1
-    if kill -0 "$pid" 2>/dev/null; then
-      echo "force kill pid=$pid ..."
-      kill -9 "$pid" 2>/dev/null || true
-    fi
-    rm -f "$PID_FILE"
-    echo "stopped"
-  else
-    echo "not running"
-  fi
+  pids=$(lsof -ti tcp:"$PORT" 2>/dev/null || true)
+  [[ -n "$pids" ]] && echo "$pids" | xargs kill -9 2>/dev/null || true
+  [[ -f .run.pid ]] && kill -9 "$(cat .run.pid 2>/dev/null)" 2>/dev/null || true
+  rm -f .run.pid
+  echo "stopped"
 }
 
 function start() {
-  if _is_running; then
-    status
-    echo "already running, skip start."
-    return 0
-  fi
-
+  stop
+  
+  # 只在首次创建 venv 时安装依赖
   if [[ ! -d ".venv" ]]; then
     python3 -m venv .venv
+    ./.venv/bin/pip install -q -r requirements.txt
   fi
-
-  # 确保依赖存在（最小保证：flask/python-docx）
-  ./.venv/bin/pip install -q -r requirements.txt
-
-  echo "starting... HOST=${HOST} PORT=${PORT} DEBUG=${DEBUG}"
-  nohup env HOST="$HOST" PORT="$PORT" DEBUG="$DEBUG" ./.venv/bin/python "$APP_CMD" >"$LOG_FILE" 2>&1 &
-  echo $! > "$PID_FILE"
-  sleep 1
-  status
-  echo "log: $LOG_FILE"
+  
+  # 启动服务
+  echo "starting... http://${HOST}:${PORT}"
+  cd "$ROOT_DIR"
+  PYTHONPATH="${ROOT_DIR}/backend:${PYTHONPATH:-}" \
+  HOST="${HOST}" PORT="${PORT}" DEBUG="${DEBUG}" \
+  nohup ./.venv/bin/python backend/app.py >server.log 2>&1 </dev/null &
+  local new_pid=$!
+  echo $new_pid > .run.pid
+  
+  # 等待一下，确认进程还在运行
+  sleep 2
+  if ps -p "$new_pid" >/dev/null 2>&1; then
+    # 再等一秒确认端口监听
+    sleep 1
+    if lsof -ti tcp:"$PORT" >/dev/null 2>&1; then
+      echo "✓ running: pid=$new_pid http://${HOST}:${PORT}"
+      echo "log: server.log"
+    else
+      echo "⚠ process started but port not listening yet (check server.log)"
+      echo "pid=$new_pid"
+    fi
+  else
+    echo "✗ failed to start (check server.log)"
+    tail -n 20 server.log 2>/dev/null || true
+    exit 1
+  fi
 }
 
-cmd="${1:-start}"
+function status() {
+  if [[ -f .run.pid ]] && ps -p "$(cat .run.pid 2>/dev/null)" >/dev/null 2>&1; then
+    echo "running: pid=$(cat .run.pid) http://${HOST}:${PORT}"
+  else
+    echo "not running"
+  fi
+}
+
+cmd="${1:-}"
 case "$cmd" in
   start) start ;;
   stop) stop ;;
-  restart) stop; start ;;
+  restart) start ;;
   status) status ;;
+  "")
+    echo "Usage: $0 {start|stop|restart|status}"
+    echo ""
+    echo "Commands:"
+    echo "  ./run.sh start    - 启动服务"
+    echo "  ./run.sh stop     - 停止服务"
+    echo "  ./run.sh restart  - 重启服务"
+    echo "  ./run.sh status   - 查看状态"
+    exit 0
+    ;;
   *)
     echo "Usage: $0 {start|stop|restart|status}"
-    echo "Examples:"
-    echo "  $0 start"
-    echo "  HOST=0.0.0.0 PORT=8000 DEBUG=0 $0 restart"
-    exit 2
+    exit 1
     ;;
 esac
-
-

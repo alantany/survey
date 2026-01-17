@@ -16,7 +16,10 @@ from pathlib import Path
 from typing import Optional
 
 from flask import Flask, jsonify, request, send_from_directory, send_file, make_response
-from docx import Document
+
+# app.py 以脚本方式运行时，sys.path 默认在 backend/ 目录，因此使用同目录模块导入
+# docx 按需导入（仅在 /api/bundle 功能需要时）
+from openrouter_fallback import build_model_candidates, chat_with_model_fallback
 
 try:
     import requests
@@ -27,6 +30,33 @@ try:
     import websocket
 except ImportError:
     websocket = None
+
+# 可选：繁体->简体（确保输出统一为简体中文）
+try:
+    from opencc import OpenCC
+except ImportError:
+    OpenCC = None
+
+
+_OPENCC_T2S = None
+
+
+def _to_simplified_zh(text: str) -> str:
+    """
+    将文本尽量转换为简体中文。
+    - 依赖 opencc-python-reimplemented（可选）；未安装则原样返回。
+    """
+    global _OPENCC_T2S
+    if not text:
+        return text
+    if OpenCC is None:
+        return text
+    try:
+        if _OPENCC_T2S is None:
+            _OPENCC_T2S = OpenCC("t2s")
+        return _OPENCC_T2S.convert(text)
+    except Exception:
+        return text
 
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -106,6 +136,8 @@ def _load_local_config() -> dict:
     return {
         "openrouter_api_key": (api_key or "").strip(),
         "openrouter_model": (model or "").strip(),
+        # 可选：多个模型候选（数组）。如果不配，仍使用 openrouter_model 或 openrouter-models.js
+        "openrouter_models": (cfg.get("openrouter_models") if isinstance(cfg, dict) else None) or [],
         "openrouter_max_tokens": max_tokens,
         "stt_api_url": (stt_api_url or "").strip(),
         "stt_api_key": (stt_api_key or "").strip(),
@@ -1051,7 +1083,7 @@ def _worker(job_id: str, src_path: Path, mode: str = "local"):
                 _set_job(job_id, status="error", message=f"STT API 转写失败：{result}")
                 return
 
-            text = result
+            text = _to_simplified_zh(result)
             transcribe_end_time = time.time()
             transcribe_duration = transcribe_end_time - transcribe_start_time
             _set_job(job_id, status="done", message="完成", text=text, finished_at=transcribe_end_time, transcribe_duration=transcribe_duration)
@@ -1087,7 +1119,8 @@ def _worker(job_id: str, src_path: Path, mode: str = "local"):
                 if alt.exists():
                     txt_path = alt
 
-            text = txt_path.read_text(encoding="utf-8", errors="ignore") if txt_path.exists() else ""
+            raw_text = txt_path.read_text(encoding="utf-8", errors="ignore") if txt_path.exists() else ""
+            text = _to_simplified_zh(raw_text)
             transcribe_end_time = time.time()
             transcribe_duration = transcribe_end_time - transcribe_start_time
             _set_job(job_id, status="done", message="完成", text=text, finished_at=transcribe_end_time, transcribe_duration=transcribe_duration, log=whisper_log)
@@ -1244,6 +1277,10 @@ def _extract_questions_from_docx(docx_path: Path) -> list[dict]:
     从 docx 里提取“编号清晰”的问题。
     输出: [{id: '1', text: '...'}, ...]
     """
+    try:
+        from docx import Document
+    except ImportError:
+        raise RuntimeError("需要安装 python-docx：pip install python-docx")
     doc = Document(str(docx_path))
     questions: list[dict] = []
 
@@ -1266,6 +1303,10 @@ def _extract_questions_from_docx(docx_path: Path) -> list[dict]:
 
 
 def _extract_full_text_from_docx(docx_path: Path) -> str:
+    try:
+        from docx import Document
+    except ImportError:
+        raise RuntimeError("需要安装 python-docx：pip install python-docx")
     doc = Document(str(docx_path))
     lines: list[str] = []
     for p in doc.paragraphs:
@@ -1278,6 +1319,8 @@ def _extract_full_text_from_docx(docx_path: Path) -> str:
 def _build_qa_prompt(transcript: str, questions_text: str) -> str:
     # 目标：输出“问题/答案”的干净纯文本（用户已验证的提示词风格）
     return f"""我上传了两份文件，一份是录音.txt，是对采访者的录音内容。 questions.txt 这是准备好的问题，我需要你分析录音的内容，并把里面的内容分别匹配到对应的 questions 的问题里面，但是录音中，无法区分出采访者和被采访者，你只能自己去识别判断。
+
+请**使用简体中文**输出（不要使用繁体字；如遇到专有名词保持原样）。
 
 请严格按 questions.txt 的分类标题与题目顺序输出。输出只允许包含“分类标题 + 问题 + 答案”，不要输出其它任何干扰内容（不要解释、不要规则、不要 JSON、不要 Markdown、不要代码块）。
 并且**每个问题必须带题号**，格式为：`题号. 问题原文`（例如：`1. 最初发现...？`）。
@@ -1311,6 +1354,9 @@ def _build_format_prompt(transcript: str) -> str:
     return f"""你是采访转写整理助手，输入是一段没有标注说话人的采访转写文本。请根据语义和语气判断说话角色，并输出整洁的对话稿。
 
 必须遵守：
+- 输出请使用简体中文（不要使用繁体字；专有名词保持原样）
+- **不得删减、不得概括、不得总结**：尽量逐句保留原始信息，只做“加标签 + 断句 + 口语整理”
+- 如果遇到口头重复/语气词：可以轻微清理，但**不要**把一大段内容压缩成一句总结
 - 只使用两种角色标签：采访者： / 受访者：
 - 一行一句，按时间顺序排列
 - 不要添加时间戳、序号、额外解释或 Markdown/代码块
@@ -1324,6 +1370,42 @@ def _build_format_prompt(transcript: str) -> str:
 {transcript}
 
 只输出整理后的对话，不要额外说明。"""
+
+
+def _split_text_chunks(text: str, max_chars: int) -> list[str]:
+    """
+    将超长文本按行切分为多个 chunk，尽量不打断语句边界。
+    - max_chars：每段最大字符数（近似控制，避免超过模型上下文）
+    """
+    t = (text or "").strip()
+    if not t:
+        return []
+    if max_chars <= 0:
+        return [t]
+
+    lines = t.splitlines()
+    chunks: list[str] = []
+    buf: list[str] = []
+    buf_len = 0
+
+    def flush():
+        nonlocal buf, buf_len
+        if buf:
+            chunks.append("\n".join(buf).strip())
+        buf = []
+        buf_len = 0
+
+    for line in lines:
+        s = (line or "").rstrip()
+        # 空行也保留，帮助分段
+        add_len = len(s) + 1
+        if buf and (buf_len + add_len) > max_chars:
+            flush()
+        buf.append(s)
+        buf_len += add_len
+
+    flush()
+    return [c for c in chunks if c]
 
 
 def _openrouter_chat(api_key: str, model: str, prompt: str, max_tokens: int) -> dict:
@@ -1355,7 +1437,8 @@ def _openrouter_chat(api_key: str, model: str, prompt: str, max_tokens: int) -> 
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        # 缩短超时到 45s，如果免费模型 45s 不吐字，通常已经挂起，尽早触发 Fallback
+        with urllib.request.urlopen(req, timeout=45) as resp:
             raw = resp.read().decode("utf-8", errors="ignore")
             return json.loads(raw)
     except urllib.error.HTTPError as e:
@@ -1430,8 +1513,8 @@ def llm_match():
 
     cfg = _load_local_config()
     api_key = cfg.get("openrouter_api_key", "")
-    model = cfg.get("openrouter_model", "tngtech/deepseek-r1t2-chimera:free")
     max_tokens = int(cfg.get("openrouter_max_tokens", 8192))
+    model_candidates = build_model_candidates(root_dir=ROOT_DIR, cfg=cfg)
 
     if not api_key:
         return jsonify({"error": "未配置 OpenRouter API Key：请在项目根目录创建 config.json（参考 config.example.json）"}), 400
@@ -1442,8 +1525,15 @@ def llm_match():
 
     prompt = _build_qa_prompt(transcript=transcript, questions_text=questions)
     match_start_time = time.time()
+
     try:
-        resp = _openrouter_chat(api_key=api_key, model=model, prompt=prompt, max_tokens=max_tokens)
+        used_model, resp = chat_with_model_fallback(
+            api_key=api_key,
+            model_candidates=model_candidates,
+            prompt=prompt,
+            max_tokens=max_tokens,
+            call_fn=_openrouter_chat,
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     match_end_time = time.time()
@@ -1466,7 +1556,7 @@ def llm_match():
 
     return jsonify(
         {
-            "model": model,
+            "model": used_model,
             "max_tokens": max_tokens,
             "finish_reason": finish_reason,
             "usage": usage,
@@ -1489,43 +1579,77 @@ def llm_format():
 
     cfg = _load_local_config()
     api_key = cfg.get("openrouter_api_key", "")
-    model = cfg.get("openrouter_model", "tngtech/deepseek-r1t2-chimera:free")
     max_tokens = int(cfg.get("openrouter_max_tokens", 8192))
+    model_candidates = build_model_candidates(root_dir=ROOT_DIR, cfg=cfg)
+    # 超长文本分段（避免一次性超过上下文导致输出“很少/不稳定”）
+    format_chunk_chars = int(cfg.get("format_chunk_chars", 8000)) if isinstance(cfg, dict) else 8000
 
     if not api_key:
         return jsonify({"error": "未配置 OpenRouter API Key：请在项目根目录创建 config.json（参考 config.example.json）"}), 400
 
-    prompt = _build_format_prompt(transcript=transcript)
+    chunks = _split_text_chunks(transcript, max_chars=format_chunk_chars)
+    if not chunks:
+        return jsonify({"error": "转写文本为空"}), 400
+
     format_start_time = time.time()
-    try:
-        resp = _openrouter_chat(api_key=api_key, model=model, prompt=prompt, max_tokens=max_tokens)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    format_end_time = time.time()
+    formatted_parts: list[str] = []
+    finish_reasons: list[str] = []
+    usages: list[dict] = []
+    used_models: list[str] = []
 
-    content = ""
-    finish_reason = ""
-    usage = {}
-    try:
-        content = resp["choices"][0]["message"]["content"]
-        finish_reason = resp["choices"][0].get("finish_reason", "")
-    except Exception:
+    for i, chunk in enumerate(chunks, start=1):
+        # 明确告诉模型：只处理本段，且不要省略
+        header = f"【第 {i}/{len(chunks)} 段】\n"
+        prompt = _build_format_prompt(transcript=header + chunk)
+        try:
+            used_model, resp = chat_with_model_fallback(
+                api_key=api_key,
+                model_candidates=model_candidates,
+                prompt=prompt,
+                max_tokens=max_tokens,
+                call_fn=_openrouter_chat,
+            )
+        except Exception as e:
+            return jsonify({"error": f"第{i}段格式化失败：{e}"}), 500
+        used_models.append(used_model)
+
         content = ""
-
-    cleaned = _strip_code_fence(content)
-    try:
-        usage = resp.get("usage") or {}
-    except Exception:
+        finish_reason = ""
         usage = {}
+        try:
+            content = resp["choices"][0]["message"]["content"]
+            finish_reason = resp["choices"][0].get("finish_reason", "")
+        except Exception:
+            content = ""
+
+        cleaned = _strip_code_fence(content).strip()
+        formatted_parts.append(cleaned)
+        finish_reasons.append(finish_reason or "")
+        try:
+            usage = resp.get("usage") or {}
+        except Exception:
+            usage = {}
+        usages.append(usage)
+
+    format_end_time = time.time()
+    cleaned_all = "\n".join([p for p in formatted_parts if p]).strip()
 
     return jsonify(
         {
-            "model": model,
+            # 兼容旧字段：返回本次最终使用的模型（最后一段的模型）
+            "model": used_models[-1] if used_models else (model_candidates[0] if model_candidates else ""),
             "max_tokens": max_tokens,
-            "finish_reason": finish_reason,
-            "usage": usage,
-            "formatted": cleaned,
+            # 兼容旧字段：单段时仍返回一个 finish_reason，否则返回列表
+            "finish_reason": finish_reasons[-1] if finish_reasons else "",
+            "finish_reasons": finish_reasons,
+            "models_used": used_models,
+            "usage": usages[-1] if usages else {},
+            "usages": usages,
+            "formatted": cleaned_all,
             "format_duration": format_end_time - format_start_time,
+            "chunk_count": len(chunks),
+            "input_chars": len(transcript),
+            "output_chars": len(cleaned_all),
         }
     )
 

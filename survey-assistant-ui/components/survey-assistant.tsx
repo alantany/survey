@@ -20,7 +20,8 @@ export default function SurveyAssistant() {
     e.preventDefault()
     setIsDragging(false)
     const file = e.dataTransfer.files[0]
-    if (file && (file.type.includes("audio") || file.name.match(/\.(mp3|wav|ogg)$/i))) {
+    // 兼容：部分环境下 m4a 可能被识别为 video/mp4 或 application/octet-stream
+    if (file && (file.type.includes("audio") || file.name.match(/\.(mp3|wav|ogg|m4a)$/i))) {
       setAudioFile(file)
     }
   }
@@ -102,7 +103,7 @@ export default function SurveyAssistant() {
                 type="file"
                 id="audio-upload"
                 className="hidden"
-                accept=".mp3,.wav,.ogg,audio/*"
+                accept=".mp3,.wav,.ogg,.m4a,audio/*"
                 onChange={handleAudioSelect}
               />
               <label
@@ -121,7 +122,7 @@ export default function SurveyAssistant() {
                 <p className="text-lg font-medium text-foreground mb-2 text-center">
                   {audioFile ? audioFile.name : "点击或拖拽音频文件到这里"}
                 </p>
-                <p className="text-sm text-muted-foreground text-center">支持 MP3、WAV、OGG 等格式</p>
+                <p className="text-sm text-muted-foreground text-center">支持 MP3、WAV、OGG、M4A 等格式</p>
               </label>
             </div>
 

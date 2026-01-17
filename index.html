@@ -279,6 +279,36 @@
             margin-top: 6px;
         }
 
+        .upload-remove-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(239, 68, 68, 0.1);
+            color: rgba(239, 68, 68, 0.9);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            z-index: 10;
+            padding: 0;
+        }
+
+        .upload-remove-btn:hover {
+            background: rgba(239, 68, 68, 0.2);
+            color: rgb(239, 68, 68);
+            transform: scale(1.1);
+        }
+
+        .upload-remove-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
         .audio-player {
             margin: 18px 0 10px;
             display: none;
@@ -472,7 +502,8 @@
             border-radius: 18px;
             padding: 16px 18px;
             min-height: 100px;
-            max-height: 300px;
+            /* 文本较长时默认给更大可视区；仍可滚动查看全部 */
+            max-height: 70vh;
             overflow-y: auto;
             color: var(--foreground);
             line-height: 1.75;
@@ -660,20 +691,45 @@
                 <span>第一步：语音转文字</span>
             </span>
         </div>
-        <div class="section-subtitle">上传音频并转写为文本；完成后可格式化为对话并下载结果。</div>
+        <div class="section-subtitle">上传音频并转写为文本；或直接上传已有文本文件进行格式化。</div>
 
-        <div class="upload-area" id="uploadArea">
-            <div class="upload-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none">
-                    <path d="M12 3v10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <path d="M8 7l4-4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                </svg>
+        <div class="two-inputs" style="margin-bottom: 20px;">
+            <div class="upload-area" id="uploadArea" style="position: relative;">
+                <button class="upload-remove-btn" id="removeAudioBtn" style="display: none;" aria-label="删除音频文件">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <div class="upload-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M19 11a7 7 0 0 1-14 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="upload-text" id="uploadAreaText">上传音频文件</div>
+                <div class="upload-text subtle" id="uploadAreaSubtext">MP3, WAV, OGG, M4A</div>
             </div>
-            <div class="upload-text">点击或拖拽音频文件到这里</div>
-            <div class="upload-text subtle">支持 MP3, WAV, OGG 等格式</div>
+            <div class="upload-area" id="uploadTextArea" style="position: relative;">
+                <button class="upload-remove-btn" id="removeTextBtn" style="display: none;" aria-label="删除文本文件">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/>
+                    </svg>
+                </button>
+                <div class="upload-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M14 2v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M16 13H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M16 17H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        <path d="M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div class="upload-text" id="uploadTextAreaText">上传文本文件</div>
+                <div class="upload-text subtle" id="uploadTextAreaSubtext">TXT 文本文件</div>
+            </div>
         </div>
-        <input type="file" id="fileInput" accept="audio/*">
+        <input type="file" id="fileInput" accept="audio/*,.m4a">
+        <input type="file" id="textFileInput" accept=".txt" style="display:none;">
 
         <div class="audio-player" id="audioPlayer">
             <audio id="audioElement" controls></audio>
@@ -815,7 +871,15 @@
 
     <script>
         const uploadArea = document.getElementById('uploadArea');
+        const uploadTextArea = document.getElementById('uploadTextArea');
+        const uploadAreaText = document.getElementById('uploadAreaText');
+        const uploadAreaSubtext = document.getElementById('uploadAreaSubtext');
+        const uploadTextAreaText = document.getElementById('uploadTextAreaText');
+        const uploadTextAreaSubtext = document.getElementById('uploadTextAreaSubtext');
         const fileInput = document.getElementById('fileInput');
+        const textFileInput = document.getElementById('textFileInput');
+        const removeAudioBtn = document.getElementById('removeAudioBtn');
+        const removeTextBtn = document.getElementById('removeTextBtn');
         const audioPlayer = document.getElementById('audioPlayer');
         const audioElement = document.getElementById('audioElement');
         const transcribeBtn = document.getElementById('transcribeBtn');
@@ -845,6 +909,13 @@
         let lastMatchContent = '';
         let matchLoadingTimer = null;
         let matchLoadingDots = 0;
+
+        // 兼容：部分 m4a 编码在浏览器里无法预览（播放器显示“错误”），但不影响后端 ffmpeg 转码后转写
+        if (audioElement) {
+            audioElement.addEventListener('error', () => {
+                showStatus('音频预览失败（可能是 m4a 编码/浏览器解码不兼容）。这不影响转写，可直接点击“开始转文字”。', 'info');
+            });
+        }
 
         function getTranscriptText() {
             return String(resultText.textContent || '').trim();
@@ -942,12 +1013,17 @@
             }
         }
 
-        // 点击上传区域
+        // 音频上传区域点击
         uploadArea.addEventListener('click', () => {
             fileInput.click();
         });
 
-        // 拖拽上传
+        // 文本上传区域点击
+        uploadTextArea.addEventListener('click', () => {
+            textFileInput.click();
+        });
+
+        // 音频上传区域拖拽
         uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
             uploadArea.classList.add('dragover');
@@ -966,21 +1042,59 @@
             }
         });
 
-        // 文件选择
+        // 文本上传区域拖拽
+        uploadTextArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadTextArea.classList.add('dragover');
+        });
+
+        uploadTextArea.addEventListener('dragleave', () => {
+            uploadTextArea.classList.remove('dragover');
+        });
+
+        uploadTextArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadTextArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleTextFile(files[0]);
+            }
+        });
+
+        // 音频文件选择
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 handleFile(e.target.files[0]);
             }
         });
 
-        // 处理文件
+        // 文本文件选择
+        textFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleTextFile(e.target.files[0]);
+            }
+        });
+
+        // 处理音频文件
         function handleFile(file) {
-            if (!file.type.startsWith('audio/')) {
-                showStatus('请选择音频文件', 'error');
+            // 兼容：部分浏览器/系统对 m4a 会给出 video/mp4 或 application/octet-stream
+            const name = (file && file.name ? String(file.name) : '').toLowerCase();
+            const isM4aByExt = name.endsWith('.m4a');
+            const mime = (file && file.type ? String(file.type) : '').toLowerCase();
+            const isAudioByMime = mime.startsWith('audio/');
+            if (!isAudioByMime && !isM4aByExt) {
+                showStatus('请选择音频文件（支持 .m4a）', 'error');
                 return;
             }
 
             audioFile = file;
+            // 显示文件名
+            uploadAreaText.textContent = file.name;
+            const fileSize = file.size > 1024 * 1024 ? (file.size / 1024 / 1024).toFixed(2) + ' MB' : (file.size / 1024).toFixed(2) + ' KB';
+            uploadAreaSubtext.textContent = fileSize;
+            // 显示删除按钮
+            removeAudioBtn.style.display = 'flex';
+            
             const url = URL.createObjectURL(file);
             audioElement.src = url;
             audioPlayer.style.display = 'block';
@@ -989,8 +1103,90 @@
             setTranscriptActionsEnabled(false);
             resultText.textContent = '';
             resultArea.style.display = 'none';
-            showStatus('文件已加载，点击“开始转文字”上传并离线转写（1小时音频可能需要较长时间）', 'info');
+            showStatus('文件已加载，点击"开始转文字"上传并离线转写（1小时音频可能需要较长时间）', 'info');
         }
+
+        // 处理文本文件
+        function handleTextFile(file) {
+            const name = (file && file.name ? String(file.name) : '').toLowerCase();
+            if (!name.endsWith('.txt')) {
+                showStatus('请选择 .txt 文本文件', 'error');
+                return;
+            }
+
+            // 显示文件名
+            uploadTextAreaText.textContent = file.name;
+            const fileSize = file.size > 1024 ? (file.size / 1024).toFixed(2) + ' KB' : file.size + ' B';
+            uploadTextAreaSubtext.textContent = fileSize;
+            // 显示删除按钮
+            removeTextBtn.style.display = 'flex';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result || '';
+                if (!text.trim()) {
+                    showStatus('文本文件为空', 'error');
+                    // 恢复默认文本
+                    uploadTextAreaText.textContent = '上传文本文件';
+                    uploadTextAreaSubtext.textContent = 'TXT 文本文件';
+                    removeTextBtn.style.display = 'none';
+                    return;
+                }
+
+                // 直接加载文本到结果区域
+                resultText.textContent = text.trim();
+                resultArea.style.display = 'block';
+                
+                // 启用格式化等相关按钮
+                setTranscriptActionsEnabled(true);
+                
+                // 隐藏音频播放器，禁用转写按钮
+                audioPlayer.style.display = 'none';
+                audioFile = null;
+                transcribeBtn.disabled = true;
+                bundleBtn.disabled = true;
+                
+                showStatus('文本文件已加载，可直接进行格式化', 'success');
+            };
+            reader.onerror = function() {
+                showStatus('读取文件失败', 'error');
+                // 恢复默认文本
+                uploadTextAreaText.textContent = '上传文本文件';
+                uploadTextAreaSubtext.textContent = 'TXT 文本文件';
+                removeTextBtn.style.display = 'none';
+            };
+            reader.readAsText(file, 'utf-8');
+        }
+
+        // 删除音频文件
+        removeAudioBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // 阻止触发上传区域的点击事件
+            audioFile = null;
+            audioElement.src = '';
+            audioPlayer.style.display = 'none';
+            fileInput.value = '';
+            uploadAreaText.textContent = '上传音频文件';
+            uploadAreaSubtext.textContent = 'MP3, WAV, OGG, M4A';
+            removeAudioBtn.style.display = 'none';
+            transcribeBtn.disabled = true;
+            resultText.textContent = '';
+            resultArea.style.display = 'none';
+            setTranscriptActionsEnabled(false);
+            showStatus('已删除音频文件', 'info');
+        });
+
+        // 删除文本文件
+        removeTextBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // 阻止触发上传区域的点击事件
+            textFileInput.value = '';
+            uploadTextAreaText.textContent = '上传文本文件';
+            uploadTextAreaSubtext.textContent = 'TXT 文本文件';
+            removeTextBtn.style.display = 'none';
+            resultText.textContent = '';
+            resultArea.style.display = 'none';
+            setTranscriptActionsEnabled(false);
+            showStatus('已删除文本文件', 'info');
+        });
 
         // 开始转文字
         transcribeBtn.addEventListener('click', async () => {
@@ -1159,6 +1355,15 @@
             bundleBtn.disabled = true;
             setTranscriptActionsEnabled(false);
             fileInput.value = '';
+            textFileInput.value = '';
+            // 恢复上传区域默认文本
+            uploadAreaText.textContent = '上传音频文件';
+            uploadAreaSubtext.textContent = 'MP3, WAV, OGG, M4A';
+            uploadTextAreaText.textContent = '上传文本文件';
+            uploadTextAreaSubtext.textContent = 'TXT 文本文件';
+            // 隐藏删除按钮
+            removeAudioBtn.style.display = 'none';
+            removeTextBtn.style.display = 'none';
             stopPolling();
             lastLog = '';
             showStatus('已清空', 'info');
@@ -1235,6 +1440,20 @@
                     msg += `，finish_reason=${data.finish_reason}`;
                 }
                 showStatus(msg, 'success');
+                // 如果被截断，给出更明确的提示，避免用户误以为“只显示了一部分”
+                if (data.finish_reason === 'length') {
+                    showStatus('提示：模型输出被截断（finish_reason=length）。可尝试在 config.json 提高 openrouter_max_tokens 或更换支持更长输出的模型，然后再点一次“格式化文本”。', 'info');
+                }
+                // 额外诊断：分段数量与输出/输入比例
+                if (typeof data.chunk_count === 'number' && data.chunk_count > 1) {
+                    showStatus(`格式化采用分段处理：chunk_count=${data.chunk_count}（长文本更稳定）`, 'info');
+                }
+                if (typeof data.input_chars === 'number' && typeof data.output_chars === 'number' && data.input_chars > 0) {
+                    const ratio = Math.round((data.output_chars / data.input_chars) * 100);
+                    if (ratio < 60) {
+                        showStatus(`提示：格式化输出明显偏短（输出/输入≈${ratio}%）。这通常是模型省略/总结或被截断导致；可换模型或调大 openrouter_max_tokens 再试。`, 'info');
+                    }
+                }
             } catch (e) {
                 showStatus('格式化失败：' + (e && e.message ? e.message : 'unknown'), 'error');
             } finally {
